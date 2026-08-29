@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nepal Flood Watch</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="dark">
+
+<header>
+  <div class="brand">
+    <!-- Lucide "waves" -->
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+      <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+      <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>
+    </svg>
+    <div>
+      <h1>Nepal Flood Watch</h1>
+      <small id="updated">connecting…</small>
+    </div>
+  </div>
+
+  <label class="region-select">
+    <span class="sr-only">Region</span>
+    <select id="region" aria-label="Select region"></select>
+  </label>
+
+  <div class="kpis" id="kpis" aria-live="polite"></div>
+
+  <div class="actions">
+    <button class="btn" id="theme" type="button" aria-label="Toggle colour theme">
+      <span id="theme-label">Dark</span>
+    </button>
+    <button class="btn" id="refresh" type="button">Refresh now</button>
+    <a class="btn primary" href="/api/export.xlsx" download>Excel</a>
+  </div>
+</header>
+
+<main>
+  <!-- Left: gauges ranked by severity -->
+  <section class="panel" aria-label="Gauges by severity">
+    <h2>Gauges by severity</h2>
+    <input type="search" id="filter" placeholder="Filter station, district, basin"
+           aria-label="Filter stations">
+    <div class="scroll" id="list"></div>
+    <div class="legend" id="legend" aria-label="Severity band counts"></div>
+  </section>
+
+  <!-- Centre: map + overlay controls -->
+  <div class="map-wrap">
+    <div id="map" role="application" aria-label="Map of river gauges and hazards in Nepal"></div>
+
+    <fieldset class="layers" aria-label="Map layers">
+      <legend>Layers</legend>
+      <label><input type="checkbox" data-layer="gauges" checked> River gauges</label>
+      <label><input type="checkbox" data-layer="impoundment" checked> Impoundment watch</label>
+      <label><input type="checkbox" data-layer="events" checked> Events &amp; alerts</label>
+      <label><input type="checkbox" data-layer="quakes" checked> Earthquakes</label>
+      <label><input type="checkbox" data-layer="fires" checked> Active fires</label>
+    </fieldset>
+
+    <aside class="detail" id="detail" hidden aria-label="Station detail"></aside>
+  </div>
+
+  <!-- Right: corroborating signals -->
+  <section class="panel right" aria-label="Incident and news feed">
+    <h2>Official incidents</h2>
+    <div class="scroll" id="incidents"></div>
+    <h2>Flood headlines</h2>
+    <div class="scroll" id="news"></div>
+    <p class="disclaimer">
+      Decision support only. DHM and MoHA issue Nepal's authoritative warnings.
+      Emergency toll-free: <strong>1155</strong>.
+    </p>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

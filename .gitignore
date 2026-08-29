@@ -1,0 +1,30 @@
+# --- runtime data (regenerated every cycle) ---
+data/
+logs/
+*.db
+*.db-wal
+*.db-shm
+*.xlsx
+snapshot.json
+
+# --- graphify knowledge graph (regenerable via /graphify) ---
+graphify-out/
+
+# --- secrets ---
+.env
+*.key
+
+# --- python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# --- editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,8 @@
+APScheduler==3.11.3
+fastapi==0.141.1
+httpx==0.28.1
+openpyxl==3.1.5
+pydantic-settings==2.15.0
+python-dateutil==2.9.0.post0
+selectolax==0.4.11
+uvicorn==0.52.4
