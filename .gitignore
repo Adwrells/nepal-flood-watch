@@ -10,6 +10,11 @@ snapshot.json
 # --- graphify knowledge graph (regenerable via /graphify) ---
 graphify-out/
 
+# --- container (local only, not published yet) ---
+Dockerfile
+.dockerignore
+docker-compose.yml
+
 # --- secrets ---
 .env
 *.key
