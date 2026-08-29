@@ -1,0 +1,22 @@
+{
+  "family": "nepal-flood-watch",
+  "networkMode": "bridge",
+  "requiresCompatibilities": ["EC2"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "localhost:5100/nepal-flood-watch:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8000, "hostPort": 8200, "protocol": "tcp" }],
+      "environment": [
+        { "name": "CYCLE_MINUTES", "value": "12" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health || exit 1"],
+        "interval": 60, "timeout": 10, "retries": 3, "startPeriod": 60
+      }
+    }
+  ]
+}

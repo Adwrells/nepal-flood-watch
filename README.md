@@ -1,14 +1,47 @@
-# Nepal Flood Watch
+<h1 align="center">Nepal Flood Watch</h1>
 
-A live flood early-warning console for Nepal. The system scrapes the country's
-official hydrological, disaster and news sources every 12 minutes, scores every
-river gauge on a 0–100 severity index, forecasts where each gauge is heading,
-and publishes the result as an interactive map, an Excel workbook and a JSON
-snapshot.
+<p align="center">
+  <em>Live flood early-warning console for Nepal — 309 river gauges, scored every 12 minutes.</em>
+</p>
 
-> This is decision support. The Department of Hydrology and Meteorology (DHM)
+<p align="center">
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white">
+  <img alt="Leaflet" src="https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white">
+  <img alt="No API key required" src="https://img.shields.io/badge/API%20keys-5%2F6%20sources%20keyless-34D399">
+</p>
+
+![Nepal Flood Watch — national severity overview](docs/images/overview-dark.png)
+
+The system scrapes Nepal's official hydrological, disaster and news sources
+every 12 minutes, scores every river gauge on a 0–100 severity index, forecasts
+where each gauge is heading, and publishes the result as an interactive map, an
+Excel workbook and a JSON snapshot.
+
+> **This is decision support.** The Department of Hydrology and Meteorology (DHM)
 > and the Ministry of Home Affairs (MoHA) issue Nepal's authoritative warnings.
 > Emergency toll-free: **1155**.
+
+### Severity bands
+
+<table>
+<tr>
+<td align="center">🟣<br><b>SEVERE</b><br><sub>90–100</sub></td>
+<td align="center">🔴<br><b>DANGER</b><br><sub>75–89</sub></td>
+<td align="center">🟠<br><b>WARNING</b><br><sub>50–74</sub></td>
+<td align="center">🟡<br><b>WATCH</b><br><sub>25–49</sub></td>
+<td align="center">🟢<br><b>NORMAL</b><br><sub>0–24</sub></td>
+</tr>
+<tr>
+<td align="center"><sub>At or past danger,<br>still rising</sub></td>
+<td align="center"><sub>Danger mark<br>reached or imminent</sub></td>
+<td align="center"><sub>Between warning<br>and danger</sub></td>
+<td align="center"><sub>Elevated: rising or<br>heavy rain upstream</sub></td>
+<td align="center"><sub>Within<br>normal range</sub></td>
+</tr>
+</table>
 
 ---
 
@@ -28,6 +61,32 @@ the state-owned *Rising Nepal*.
 It also carries a hazard model that a gauge-threshold system cannot express:
 **landslide- and moraine-dammed lake outburst floods**, the class of event that
 struck Rasuwa in July 2025.
+
+### How a cycle works
+
+```mermaid
+flowchart LR
+    subgraph S["Sources · every 12 min"]
+        direction TB
+        A["DHM river watch<br/><sub>309 gauges</sub>"]
+        B["BIPAD · MoHA<br/><sub>incidents</sub>"]
+        C["Open-Meteo<br/><sub>rain +12 h</sub>"]
+        D["USGS · FIRMS<br/><sub>quake · fire</sub>"]
+        E["5 news feeds"]
+    end
+    S --> F["clean.py<br/><sub>standardise · reject · dedupe</sub>"]
+    F --> G["scoring.py<br/><sub>FSI 0–100</sub>"]
+    G --> H["outburst.py<br/><sub>impoundment detector</sub>"]
+    H --> I["analytics.py<br/><sub>forecast · prescribe</sub>"]
+    I --> J[("SQLite")]
+    I --> K["Excel"]
+    I --> L["JSON"]
+    J --> M["Map console"]
+
+    style G fill:#38BDF8,stroke:#0284C7,color:#06121F
+    style H fill:#D946EF,stroke:#A21CAF,color:#fff
+    style M fill:#34D399,stroke:#059669,color:#06121F
+```
 
 ---
 
@@ -104,8 +163,23 @@ FSI = 0.50·level + 0.25·rise + 0.18·rain + 0.07·corroboration
 
 **Bands:** SEVERE ≥ 90 · DANGER ≥ 75 · WARNING ≥ 50 · WATCH ≥ 25 · NORMAL < 25
 
+```mermaid
+pie showData
+    title FSI component weights
+    "Level vs danger mark" : 50
+    "Rate of rise" : 25
+    "Rainfall pressure" : 18
+    "Corroboration" : 7
+```
+
 A slow river at 90% of its danger mark is calmer than a fast one at 60%, which
 is why rate of rise carries a quarter of the weight.
+
+Every gauge opens into a full breakdown — the four score drivers, a 12-hour
+forecast with its 80% prediction band, and a verdict that cites the rate, the
+sample size and the residual sigma it rests on:
+
+![Station detail with score drivers, forecast and verdict](docs/images/station-detail.png)
 
 ---
 
@@ -120,6 +194,23 @@ A threshold model is structurally blind to that event, because the diagnostic
 signal is **not a rising river**. It is a river that goes abnormally quiet while
 rain is falling on its catchment, because water is being stored behind a
 barrier.
+
+```mermaid
+sequenceDiagram
+    participant U as Upstream slope
+    participant R as River
+    participant G as Gauge
+    participant W as Nepal Flood Watch
+
+    U->>R: Mass movement dams the channel
+    R-->>G: Flow STOPS arriving
+    Note over G: Stage FALLS while it rains —<br/>a threshold model reads this as "calm"
+    G->>W: level down 15%+, rain 25 mm+
+    W->>W: Impoundment suspected → band floored at WARNING
+    U->>R: Barrier fails
+    R->>G: Surge, ~35 km/h
+    Note over W: Froehlich + Costa–Schuster envelope,<br/>Manning celerity → arrival time
+```
 
 The system detects that signature directly, applies published dam-break
 relations (Froehlich 1995b; Costa & Schuster 1988) to estimate the peak
@@ -168,6 +259,46 @@ forecast sparkline with its prediction band, and the recommended actions.
 Event pins are teardrops rather than discs so an event never reads as a gauge,
 and headline pins placed at a district centroid are drawn hollow because their
 location is inferred rather than surveyed.
+
+<table>
+<tr>
+<td width="50%"><img alt="Dark theme" src="docs/images/overview-dark.png"></td>
+<td width="50%"><img alt="Light theme" src="docs/images/overview-light.png"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Dark</b> — the default; ops rooms are dark</sub></td>
+<td align="center"><sub><b>Light</b> — same tokens, swapped</sub></td>
+</tr>
+</table>
+
+**Explore tab** — click any gauge or event to inspect it from orbit, with the
+model's own severity tags drawn over the imagery. Two kinds of imagery are
+offered and the panel always states which you are looking at:
+
+<table>
+<tr>
+<td width="50%"><img alt="High-resolution satellite" src="docs/images/explore-satellite.png"></td>
+<td width="50%"><img alt="MODIS flood-enhanced bands 7-2-1" src="docs/images/explore-flood-bands.png"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Esri</b> — sub-metre detail, but a mosaic<br>months to years old</sub></td>
+<td align="center"><sub><b>MODIS 7-2-1</b> — 250 m, but from yesterday.<br>Standing water reads near-black</sub></td>
+</tr>
+</table>
+
+That distinction is stated on screen every time, because for *"is this village
+under water"* a two-year-old mosaic read as current is a dangerous mistake.
+
+Alongside the imagery, `/api/nearby` lists BIPAD incidents, gauges, quakes and
+headlines within 30 km with distances — a MODIS pixel cannot see a washed-out
+footbridge, and an incident report cannot show how far water has spread.
+
+Any view is deep-linkable, so a shift handover can point at one gauge rather
+than at "the dashboard":
+
+```
+/#station=186&tab=explore&imagery=flood
+```
 
 **Excel workbook** — six sheets, rewritten atomically every cycle: Dashboard
 (band counts and the top 25), Stations (the full scored table with conditional
@@ -250,6 +381,22 @@ region; Bhutan and Uttarakhand are declared and disabled.
 Rainfall, earthquakes and fire detection are already global. Enabling a region
 requires one thing: a national gauge adapter. Add a spider, list it in the
 region's `sources`, set `enabled = True`.
+
+---
+
+## Deployment
+
+Container image, plus AWS steps for ECR, Lightsail and ECS Fargate:
+**[docs/DEPLOY-AWS.md](docs/DEPLOY-AWS.md)**.
+
+Two constraints are non-negotiable and are explained there: the service must run
+as **exactly one instance** (the scheduler lives in the web process, so a second
+task scrapes every source twice), and it needs **persistent storage** (the
+reading history behind every forecast and the impoundment baseline lives in
+`flood.db`).
+
+The whole ECR to ECS path is rehearsable locally against
+[Floci](https://floci.io) before touching real AWS.
 
 ---
 

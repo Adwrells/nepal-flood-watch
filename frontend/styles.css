@@ -327,9 +327,9 @@ ol.actions li span { display: block; text-decoration: none; }
 .freshness.current { border-left-color: var(--normal); }
 .freshness.stale { border-left-color: var(--watch); }
 
-.sat-wrap { display: flex; flex-direction: column; flex: 1; min-height: 220px; padding: 0 var(--s4) var(--s3); }
+.sat-wrap { display: flex; flex-direction: column; flex: none; padding: 0 var(--s4) var(--s3); }
 #satmap {
-  flex: 1; min-height: 220px; border-radius: var(--radius);
+  height: 200px; border-radius: var(--radius);
   border: 1px solid var(--border); background: var(--bg);
 }
 .sat-actions { display: flex; gap: var(--s2); margin-top: var(--s2); }

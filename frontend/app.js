@@ -66,6 +66,7 @@ function setBasemap(id) {
   }
   const radio = document.querySelector(`input[name="basemap"][value="${id}"]`);
   if (radio) radio.checked = true;
+  if (typeof writeHash === 'function') writeHash();
 }
 
 // ---------------------------------------------------------------------------
@@ -318,6 +319,7 @@ async function renderFeeds() {
 async function selectStation(id) {
   state.selected = id;
   renderList();
+  writeHash();
   const d = await fetchJson(`/api/station/${id}`);
   const p = d.predictive, fc = p.forecast;
 
@@ -751,6 +753,9 @@ async function exploreAt(place) {
 
   $('#imagery-controls').hidden = false;
   $('#sat-wrap').hidden = false;
+  // Deep links can set the layer, so the control must be told what it is showing.
+  sel.value = state.satLayer;
+  $('#imagery-date').value = state.satDate;
   $('#date-field').hidden = state.satLayer === 'esri';
 
   renderExploreHead(place);
@@ -877,6 +882,7 @@ async function renderNearby(place) {
 
 function showTab(which) {
   const feeds = which === 'feeds';
+  if (typeof writeHash === 'function') writeHash();
   $('#pane-feeds').hidden = !feeds;
   $('#pane-explore').hidden = feeds;
   $('#tab-feeds').setAttribute('aria-selected', String(feeds));
@@ -911,6 +917,56 @@ $('#sat-zoom-out').addEventListener('click', () => satMap && satMap.zoomOut());
 document.querySelectorAll('input[name="basemap"]').forEach((r) =>
   r.addEventListener('change', () => setBasemap(r.value)));
 
+
+/* ---------------------------------------------------------------------------
+   Deep links.
+
+   State lives in the URL hash so a view can be shared: #station=5080&tab=explore
+   points a colleague at one gauge's orbital view rather than at "the dashboard".
+   Reading happens once at boot; writing is debounced so panning the map does not
+   flood the history stack.
+--------------------------------------------------------------------------- */
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const out = {};
+  for (const [k, v] of h) out[k] = v;
+  return out;
+}
+
+let hashTimer = null;
+function writeHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const parts = [];
+    if (state.selected) parts.push(`station=${state.selected}`);
+    if (!$('#pane-explore').hidden) parts.push('tab=explore');
+    if (state.theme !== 'dark') parts.push(`theme=${state.theme}`);
+    if (state.basemap !== 'dark') parts.push(`basemap=${state.basemap}`);
+    if (state.satLayer !== 'esri') parts.push(`imagery=${state.satLayer}`);
+    const next = parts.length ? '#' + parts.join('&') : ' ';
+    history.replaceState(null, '', next);
+  }, 400);
+}
+
+/* Applied after the first data load, since a station link needs the station
+   list to exist before it can resolve. */
+async function applyHash() {
+  const h = readHash();
+  if (h.theme === 'light' || h.theme === 'dark') applyTheme(h.theme);
+  if (h.basemap && ['dark', 'light', 'esri'].includes(h.basemap)) setBasemap(h.basemap);
+  if (h.imagery) state.satLayer = h.imagery;
+
+  if (h.station) {
+    const st = state.stations.find((x) => x.id === Number(h.station));
+    if (st) {
+      await selectStation(st.id);
+      if (h.tab === 'explore') await exploreAt(st);
+    }
+  } else if (h.tab === 'explore') {
+    showTab('explore');
+  }
+}
+
 /* Region selector. Nepal is the only enabled region today; the others are
    listed but disabled so the extension point is visible rather than implied. */
 async function loadRegions() {
@@ -935,5 +991,6 @@ $('#region').addEventListener('change', (e) => {
 applyTheme(state.theme);
 updateEventHint();
 loadRegions();
-refresh();
+// A station link cannot resolve until the station list exists.
+refresh().then(applyHash);
 setInterval(refresh, POLL_MS);
