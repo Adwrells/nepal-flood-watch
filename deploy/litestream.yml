@@ -1,0 +1,39 @@
+# Litestream — continuous replication of flood.db to object storage.
+#
+# Why this and not a hosted database: the app is architecturally single-writer
+# (one scheduler, in-process), which is exactly Litestream's model. Every
+# Postgres option would ask us to port SQL in order to buy concurrency the
+# design forbids.
+#
+# What this protects: flood.db holds the reading history that every forecast,
+# rise rate and impoundment baseline is computed from. Without replication a
+# redeploy restarts the system blind until enough cycles rebuild that history.
+#
+# What this does NOT protect: data/tiles. Those are a cache of someone else's
+# map tiles, not our data - they are re-fetchable with `launch.py tiles`, and
+# replicating 195 MB of third-party imagery would be both wasteful and rude.
+
+dbs:
+  - path: /app/data/flood.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: flood.db
+        region: ${AWS_REGION}
+
+        # Endpoint is normally empty (real AWS). Set it to point at an
+        # S3-compatible service - Floci locally, or MinIO / R2 / Backblaze.
+        endpoint: ${LITESTREAM_ENDPOINT}
+        force-path-style: ${LITESTREAM_FORCE_PATH_STYLE}
+
+        # A cycle runs every 12 minutes, so a 10s sync means at most a few
+        # seconds of writes are ever unreplicated, and in practice a crash
+        # loses nothing: the next cycle re-scrapes the same sources anyway.
+        sync-interval: 10s
+
+        # Snapshot every 6 h and keep 24 h of them. Recovery only ever needs to
+        # replay a few hours of WAL, and the retention keeps object count (and
+        # therefore request cost) low.
+        snapshot-interval: 6h
+        retention: 24h
+        retention-check-interval: 1h

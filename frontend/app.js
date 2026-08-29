@@ -973,11 +973,16 @@ async function loadRegions() {
   try {
     const { default: def, regions } = await fetchJson('/api/regions');
     state.region = def;
-    $('#region').innerHTML = regions.map((r) => `
-      <option value="${esc(r.code)}" ${r.code === def ? 'selected' : ''}
-              ${r.enabled ? '' : 'disabled'}>
-        ${esc(r.name)}${r.enabled ? '' : ' (not yet available)'}
-      </option>`).join('');
+    // Live regions first, then the declared-but-disabled ones grouped under a
+    // single heading -- repeating "(not yet available)" on every row said the
+    // same thing three times.
+    const live = regions.filter((r) => r.enabled);
+    const soon = regions.filter((r) => !r.enabled);
+    const opt = (r) => `<option value="${esc(r.code)}"${r.code === def ? ' selected' : ''}${
+      r.enabled ? '' : ' disabled'}>${esc(r.name)}</option>`;
+    $('#region').innerHTML =
+      live.map(opt).join('') +
+      (soon.length ? `<optgroup label="Others — coming soon">${soon.map(opt).join('')}</optgroup>` : '');
     const active = regions.find((r) => r.code === def);
     if (active) map.setView(active.center, active.zoom);
   } catch { /* selector is optional; the map still works */ }

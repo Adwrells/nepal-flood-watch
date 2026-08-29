@@ -263,6 +263,63 @@ curl -s https://YOUR_HOST/api/health | jq '{stations, sources, quality}'
 `news`. `fire` reports an error until the FIRMS key is set — that is expected
 and non-fatal.
 
+
+---
+
+## 6. Durable storage with Litestream
+
+The container replicates `flood.db` to S3 continuously, so a redeploy or a lost
+volume does not cost the gauge history. This is wired into the image: the
+entrypoint restores before the app starts, then runs uvicorn under
+`litestream replicate -exec`.
+
+Create the bucket:
+
+```bash
+aws s3api create-bucket --bucket nfw-litestream-$AWS_ACCOUNT --region $AWS_REGION --create-bucket-configuration LocationConstraint=$AWS_REGION
+aws s3api put-public-access-block --bucket nfw-litestream-$AWS_ACCOUNT --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+Then pass the bucket to the container:
+
+```bash
+-e LITESTREAM_BUCKET=nfw-litestream-$AWS_ACCOUNT -e AWS_REGION=$AWS_REGION
+```
+
+On real AWS leave `LITESTREAM_ENDPOINT` unset. For an S3-compatible service
+(Floci, MinIO, R2, Backblaze) set it and `LITESTREAM_FORCE_PATH_STYLE=true`.
+
+**If `LITESTREAM_BUCKET` is unset the app still runs, without replication**, and
+says so in its first log line. Check for that after every deploy — silent
+non-replication only reveals itself when you need the backup:
+
+```bash
+docker logs nfw 2>&1 | grep litestream | head -3
+```
+
+### Verified, not assumed
+
+The restore path was tested against Floci's emulated S3: a container ran until
+it had scraped a full cycle, the Docker volume was then **deleted outright**,
+and a fresh container restored 262,144 bytes and came back with 309 stations,
+196 readings, 309 scores and 176 incidents intact.
+
+### Cost
+
+At ~222 MB and a 10-second sync interval, storage is a few cents a month; the
+cost is dominated by PUT requests and still lands under $0.50/month. Retention
+is 24 h of WAL with 6-hourly snapshots, which keeps object count low.
+
+### What Litestream does not cover
+
+`data/tiles` is not replicated, deliberately — it is a cache of someone else's
+map tiles, not our data. After a fresh deploy the map re-fetches on demand, or
+run the prefetch once:
+
+```bash
+curl -X POST https://YOUR_HOST/api/tiles/prefetch?style=dark
+```
+
 ---
 
 ## 5. Costs and courtesy
