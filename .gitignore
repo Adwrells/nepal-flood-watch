@@ -15,6 +15,9 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 
+.claude/
+CLAUDE.md
+
 # --- secrets ---
 .env
 *.key
