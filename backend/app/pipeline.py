@@ -10,7 +10,7 @@ station list, so cleaning happens before anything spatial or numeric.
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import analytics, clean, db, excel
 from .config import settings
@@ -61,6 +61,41 @@ def _history(station_ids: list[int]) -> dict[int, list]:
         if len(bucket) < HISTORY_WINDOW:
             bucket.append((r["ts"], r["level"]))
     return {k: list(reversed(v)) for k, v in out.items()}
+
+
+# Retention. Without this the database grows forever, and -- worse -- rows
+# written by an older, buggier version of a spider linger and get served as if
+# they were current. Anything the model actually uses has a much shorter
+# horizon than these limits.
+RETENTION_DAYS = {
+    "readings": 90,     # history for forecasts and the impoundment baseline
+    "scores": 30,
+    "incidents": 60,
+    "news": 30,
+    "hazard_events": 90,
+    "cycles": 30,
+}
+_TS_COLUMN = {
+    "readings": "ts", "scores": "ts", "incidents": "occurred_on",
+    "news": "published", "hazard_events": "occurred_on", "cycles": "started",
+}
+
+
+def prune() -> dict:
+    """Drop rows past their retention horizon. Returns what was removed."""
+    removed = {}
+    with db.conn() as c:
+        for table, days in RETENTION_DAYS.items():
+            cutoff = (datetime.now().astimezone() - timedelta(days=days)).isoformat()
+            col = _TS_COLUMN[table]
+            # Only delete rows with a parseable timestamp; a blank one is a data
+            # bug, and silently deleting it would hide that.
+            cur = c.execute(
+                f"DELETE FROM {table} WHERE {col} IS NOT NULL AND {col} != '' AND {col} < ?",
+                (cutoff,))
+            if cur.rowcount > 0:
+                removed[table] = cur.rowcount
+    return removed
 
 
 def _persist(stations, rainfall, incidents, news, scores, hazards) -> None:
@@ -212,6 +247,9 @@ async def run_cycle() -> dict:
         scores.append(score)
 
     _persist(stations, rainfall, incidents, news, scores, hazards)
+    pruned = prune()
+    if pruned:
+        log.info("pruned expired rows: %s", pruned)
     excel.export(stations, scores, rain_by_id, incidents, news)
     _write_snapshot(stations, scores, hazards, cleaned["quality"])
 
@@ -221,6 +259,7 @@ async def run_cycle() -> dict:
         cycle_minutes=settings.cycle_minutes,
         quality=cleaned["quality"],
         impoundment_alerts=sum(s["impoundment_suspected"] for s in scores),
+        pruned=pruned,
     )
     with db.conn() as c:
         c.execute("INSERT OR REPLACE INTO cycles (started,finished,ok,notes) VALUES (?,?,?,?)",

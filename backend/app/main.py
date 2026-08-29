@@ -6,6 +6,7 @@ plus one at startup, so the map is never empty on first load.
 import asyncio
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from . import analytics, db, logs, pipeline, regions, tiles
 from .config import NEPAL_BBOX, ROOT, settings
 from .hazards import earth_rotation, outburst
-from .scoring import BANDS
+from .scoring import BANDS, haversine_km
 
 logs.setup()
 log = logging.getLogger("app")
@@ -129,6 +130,10 @@ def station_detail(station_id: int):
         "history": [{"ts": t, "level": lv} for t, lv in history],
         "warning_level": row["warning_level"],
         "danger_level": row["danger_level"],
+        # Surfaced at the top level because the UI verdict quotes it directly.
+        "rise_rate": row["rise_rate"],
+        "impoundment_suspected": row["impoundment_suspected"],
+        "impoundment_reason": row["impoundment_reason"],
     }
 
 
@@ -306,8 +311,101 @@ async def tile(style: str, z: int, x: int, y: int):
     data = await tiles.fetch_tile(app.state.tile_client, style, z, x, y)
     if data is None:
         raise HTTPException(404, "tile outside Nepal or unavailable")
-    return Response(data, media_type="image/png",
+    # Sniff rather than assume: the canvas basemaps are JPEG despite the .png
+    # route, and declaring the wrong type breaks strict image decoders.
+    kind = "image/png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+    return Response(data, media_type=kind,
                     headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/api/nearby")
+def nearby(lat: float, lon: float, radius_km: float = 30.0, limit: int = 40):
+    """Ground truth around one point: BIPAD incidents, gauges, quakes, headlines.
+
+    Satellite imagery says what is on the ground; BIPAD says what someone
+    actually reported happening there. Neither is sufficient alone -- a
+    250 m MODIS pixel cannot see a washed-out footbridge, and an incident
+    report cannot show how far the water has spread. The Explore panel puts
+    them side by side deliberately.
+
+    Everything is returned with its distance so the operator can judge
+    relevance rather than trusting a radius we picked.
+    """
+    out = {"incidents": [], "gauges": [], "hazards": [], "news": []}
+
+    with db.conn() as c:
+        for r in c.execute("SELECT * FROM incidents ORDER BY occurred_on DESC LIMIT 500"):
+            d = haversine_km(lat, lon, r["lat"], r["lon"])
+            if d <= radius_km:
+                out["incidents"].append({**dict(r), "distance_km": round(d, 1)})
+
+        for r in c.execute("SELECT * FROM hazard_events ORDER BY occurred_on DESC LIMIT 500"):
+            d = haversine_km(lat, lon, r["lat"], r["lon"])
+            if d <= radius_km:
+                item = {**dict(r), "distance_km": round(d, 1)}
+                item["extra"] = json.loads(item["extra"] or "{}")
+                out["hazards"].append(item)
+
+    for st in _latest_scores():
+        if st["lat"] is None:
+            continue
+        d = haversine_km(lat, lon, st["lat"], st["lon"])
+        if d <= radius_km:
+            out["gauges"].append({
+                "id": st["id"], "name": st["name"], "fsi": st["fsi"], "band": st["band"],
+                "level": st["level"], "danger_level": st["danger_level"],
+                "impoundment_suspected": st["impoundment_suspected"],
+                "distance_km": round(d, 1),
+            })
+
+    # News carries only a district, so match on the districts of the gauges in
+    # range rather than pretending a headline has coordinates.
+    districts = {g_st["district"] for g_st in _latest_scores()
+                 if g_st["lat"] is not None and g_st["district"]
+                 and haversine_km(lat, lon, g_st["lat"], g_st["lon"]) <= radius_km}
+    if districts:
+        with db.conn() as c:
+            for r in c.execute("SELECT * FROM news ORDER BY rowid DESC LIMIT 200"):
+                hit = {d.strip() for d in (r["districts"] or "").split(",") if d.strip()}
+                if hit & districts:
+                    out["news"].append({**dict(r), "matched": sorted(hit & districts)})
+
+    for key in out:
+        out[key].sort(key=lambda i: i.get("distance_km", 999))
+        out[key] = out[key][:limit]
+
+    out["query"] = {"lat": lat, "lon": lon, "radius_km": radius_km}
+    out["counts"] = {k: len(v) for k, v in out.items() if isinstance(v, list)}
+    return out
+
+
+@app.get("/api/imagery/options")
+def imagery_options():
+    """Available imagery and, importantly, how current each option actually is."""
+    return tiles.imagery_options()
+
+
+@app.get("/api/satellite/{z}/{x}/{y}.jpg")
+async def satellite_tile(z: int, x: int, y: int):
+    """High-resolution satellite mosaic (Esri). Detailed but NOT current."""
+    data = await tiles.fetch_satellite(app.state.tile_client, z, x, y)
+    if data is None:
+        raise HTTPException(404, "tile outside Nepal or unavailable")
+    return Response(data, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/api/gibs/{layer}/{date}/{z}/{x}/{y}.jpg")
+async def gibs_tile(layer: str, date: str, z: int, x: int, y: int):
+    """NASA GIBS daily imagery. Coarse, but genuinely from the last 24-48 h."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise HTTPException(400, "date must be YYYY-MM-DD")
+    data = await tiles.fetch_gibs(app.state.tile_client, layer, date, z, x, y)
+    if data is None:
+        raise HTTPException(404, "no imagery for that layer, date or location")
+    # Dated imagery never changes, so it can be cached hard.
+    return Response(data, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=2592000"})
 
 
 @app.get("/api/export.xlsx")

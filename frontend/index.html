@@ -54,6 +54,13 @@
   <div class="map-wrap">
     <div id="map" role="application" aria-label="Map of river gauges and hazards in Nepal"></div>
 
+    <fieldset class="layers basemaps" aria-label="Base map">
+      <legend>Base map</legend>
+      <label><input type="radio" name="basemap" value="dark" checked> Dark</label>
+      <label><input type="radio" name="basemap" value="light"> Light</label>
+      <label><input type="radio" name="basemap" value="esri"> Satellite</label>
+    </fieldset>
+
     <fieldset class="layers" aria-label="Map layers">
       <legend>Layers</legend>
       <label><input type="checkbox" data-layer="gauges" checked> River gauges</label>
@@ -67,11 +74,50 @@
   </div>
 
   <!-- Right: corroborating signals -->
-  <section class="panel right" aria-label="Incident and news feed">
-    <h2>Official incidents</h2>
-    <div class="scroll" id="incidents"></div>
-    <h2>Flood headlines</h2>
-    <div class="scroll" id="news"></div>
+  <section class="panel right" aria-label="Feeds and satellite explorer">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-feeds" aria-controls="pane-feeds" aria-selected="true">Feeds</button>
+      <button role="tab" id="tab-explore" aria-controls="pane-explore" aria-selected="false">Explore</button>
+    </div>
+
+    <div class="pane" id="pane-feeds" role="tabpanel" aria-labelledby="tab-feeds">
+      <h2>Official incidents</h2>
+      <div class="scroll" id="incidents"></div>
+      <h2>Flood headlines</h2>
+      <div class="scroll" id="news"></div>
+    </div>
+
+    <div class="pane" id="pane-explore" role="tabpanel" aria-labelledby="tab-explore" hidden>
+      <div class="explore-head" id="explore-head">
+        <p class="empty">Click any gauge or event on the map to inspect it from orbit.</p>
+      </div>
+
+      <div class="imagery-controls" id="imagery-controls" hidden>
+        <label class="field">
+          <span>Imagery</span>
+          <select id="imagery-layer"></select>
+        </label>
+        <label class="field" id="date-field" hidden>
+          <span>Date</span>
+          <select id="imagery-date"></select>
+        </label>
+      </div>
+
+      <p class="freshness" id="freshness" hidden></p>
+
+      <div class="sat-wrap" id="sat-wrap" hidden>
+        <div id="satmap" role="application" aria-label="Satellite view of the selected location"></div>
+        <div class="sat-actions">
+          <button class="btn" id="sat-zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button class="btn" id="sat-zoom-out" type="button" aria-label="Zoom out">&minus;</button>
+          <a class="btn" id="worldview" href="#" target="_blank" rel="noopener noreferrer">NASA Worldview</a>
+        </div>
+      </div>
+
+      <div id="external-links"></div>
+      <div class="nearby scroll" id="nearby"></div>
+    </div>
+
     <p class="disclaimer">
       Decision support only. DHM and MoHA issue Nepal's authoritative warnings.
       Emergency toll-free: <strong>1155</strong>.

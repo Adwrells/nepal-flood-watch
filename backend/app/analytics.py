@@ -114,6 +114,8 @@ def exceedance_percentile(level, history: list[float]) -> float | None:
 
 
 def trend_class(rise_rate_mh) -> str:
+    # None means there is no second reading to difference against yet -- which
+    # is different from "we looked and could not tell", so it gets its own word.
     if rise_rate_mh is None:
         return "unknown"
     if rise_rate_mh > 0.15:

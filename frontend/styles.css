@@ -262,3 +262,168 @@ ol.actions li span { display: block; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+
+/* ---------- basemap switcher ---------- */
+.layers.basemaps { top: auto; bottom: var(--s3); }
+.layers input[type="radio"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+/* ---------- right-panel tabs ---------- */
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tabs button {
+  flex: 1; background: none; border: 0; color: var(--muted);
+  padding: var(--s3) var(--s2); font-size: 12px; font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color .18s ease, border-color .18s ease;
+}
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--fg); }
+
+.pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pane[hidden] { display: none; }
+
+/* ---------- explore ---------- */
+.explore-head { padding: var(--s3) var(--s4) 0; }
+.explore-title h3 { font-size: 14px; }
+
+/* Danger indicator: number, bar and band label together, so severity is never
+   carried by colour alone. */
+.danger-meter {
+  display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s3);
+  align-items: center; margin: var(--s3) 0;
+}
+.danger-num { text-align: center; }
+.danger-num b {
+  display: block; font-size: 26px; line-height: 1;
+  color: var(--band); font-variant-numeric: tabular-nums;
+}
+.danger-num span { font-size: 9px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.danger-bar { background: var(--surface-2); border-radius: 4px; height: 8px; overflow: hidden; }
+.danger-bar i { display: block; height: 100%; background: var(--band); }
+.danger-side { grid-column: 2; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+.impound-note {
+  margin: 0 0 var(--s3); padding: var(--s2) var(--s3);
+  background: var(--surface-2); border-left: 3px solid var(--severe);
+  border-radius: 4px; font-size: 11px;
+}
+
+.imagery-controls { display: grid; gap: var(--s2); padding: var(--s2) var(--s4) var(--s3); }
+.field { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: var(--s2); font-size: 11px; }
+.field span { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+.field select {
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 6px var(--s2); min-height: 32px; width: 100%;
+}
+
+/* The honesty banner. A months-old mosaic and yesterday's pass must never look
+   like the same claim. */
+.freshness {
+  margin: 0 var(--s4) var(--s3); padding: var(--s2) var(--s3);
+  border-radius: var(--radius); font-size: 11px; line-height: 1.4;
+  border-left: 3px solid var(--muted); background: var(--surface-2);
+}
+.freshness.current { border-left-color: var(--normal); }
+.freshness.stale { border-left-color: var(--watch); }
+
+.sat-wrap { display: flex; flex-direction: column; flex: 1; min-height: 220px; padding: 0 var(--s4) var(--s3); }
+#satmap {
+  flex: 1; min-height: 220px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg);
+}
+.sat-actions { display: flex; gap: var(--s2); margin-top: var(--s2); }
+.sat-actions .btn { flex: none; min-height: 32px; padding: 0 var(--s3); }
+.sat-actions .btn:last-child { flex: 1; justify-content: center; font-size: 12px; }
+
+/* FSI numerals over imagery need their own contrast, not the map's. */
+.sat-label { background: none; border: 0; }
+.sat-label span {
+  display: inline-block; padding: 0 4px; border-radius: 3px;
+  background: rgba(6,18,31,.78); color: var(--band);
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+.detail-tools { display: flex; gap: var(--s2); align-items: center; }
+.detail-tools .btn { min-height: 26px; padding: 0 var(--s2); font-size: 11px; }
+
+
+/* ---------- nearby ground truth ---------- */
+.nearby { padding: 0 var(--s4) var(--s3); max-height: 42vh; }
+.nearby h4 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin: var(--s3) 0 var(--s2);
+}
+.nearby-head { padding-top: var(--s2); border-top: 1px solid var(--border); margin-top: var(--s3); }
+.nearby-head h4 { margin-bottom: 2px; }
+.nearby-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+
+.nearby-row {
+  display: grid; grid-template-columns: 8px 1fr auto; gap: var(--s2);
+  align-items: start; width: 100%; text-align: left;
+  background: none; border: 0; border-radius: 4px;
+  padding: var(--s2); color: inherit; text-decoration: none;
+  font-size: 12px; line-height: 1.35;
+}
+.nearby-row:hover { background: var(--surface-2); }
+.nearby-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; }
+.nearby-main { display: block; min-width: 0; }
+.nearby-main .small { display: block; margin-top: 1px; }
+.nearby-row b { font-variant-numeric: tabular-nums; }
+
+
+/* The dark basemap is real dark cartography from the provider, not an
+   inverted light one, so no filter is applied to the tile pane. An
+   earlier build inverted OSM tiles here; that is gone deliberately. */
+
+
+
+/* ---------- forecast key + verdict ---------- */
+.spark-key {
+  display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3);
+  margin: var(--s2) 0 var(--s3); font-size: 10px;
+}
+.key-item { display: inline-flex; align-items: center; gap: 5px; }
+.key-item em { font-style: normal; color: var(--muted); }
+
+/* The verdict states what the chart means and cites the numbers behind it.
+   Tone is carried by the left border AND the icon, never colour alone. */
+.verdict {
+  border-left: 3px solid var(--muted); background: var(--surface-2);
+  border-radius: 4px; padding: var(--s2) var(--s3); font-size: 11px; line-height: 1.45;
+}
+.verdict.urgent { border-left-color: var(--danger); }
+.verdict.watch  { border-left-color: var(--warning); }
+.verdict.calm   { border-left-color: var(--normal); }
+.verdict.thin   { border-left-color: var(--muted); }
+.verdict-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.verdict-head b { font-size: 12px; }
+.verdict.urgent .verdict-icon { color: var(--danger); }
+.verdict.watch  .verdict-icon { color: var(--warning); }
+.verdict.calm   .verdict-icon { color: var(--normal); }
+.verdict.thin   .verdict-icon { color: var(--muted); }
+.verdict-icon { display: inline-flex; }
+.verdict p { margin: 0; }
+.verdict .evidence {
+  margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums;
+}
+
+
+/* The events toggle is zoom-gated; saying so beats a checkbox that appears
+   broken at country zoom. */
+.layers label.gated { color: var(--muted); }
+.gate-hint {
+  margin-left: auto; font-size: 9px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--accent); opacity: .85;
+}
+
+
+/* ---------- hand-off links ---------- */
+#external-links { padding: 0 var(--s4); }
+#external-links h4 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin: var(--s3) 0 var(--s2);
+}
+.ext-links { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.ext-links .btn { justify-content: center; font-size: 11px; min-height: 32px; }
