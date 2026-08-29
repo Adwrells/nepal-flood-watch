@@ -34,36 +34,33 @@ struck Rasuwa in July 2025.
 ## Quick start
 
 ```bash
-git clone <repo> && cd nepal-flood-watch
+git clone https://github.com/Adwrells/nepal-flood-watch
+cd nepal-flood-watch
 ```
 
-On Windows, the run script handles the virtual environment and dependencies:
+`launch.py` runs identically on Linux, macOS and Windows. It creates the
+virtual environment and installs dependencies on first run, then re-executes
+itself inside it, so nothing beyond the standard library is needed to start.
 
 ```bash
-.\run.ps1
+python launch.py
 ```
 
 The console comes up at **http://127.0.0.1:8000**. The first cycle runs
 immediately, so the map is populated within about thirty seconds.
 
-To verify a deployment before shipping:
+| Command | Does |
+|---------|------|
+| `python launch.py` | Serve the console (same as `serve`) |
+| `python launch.py serve --host 0.0.0.0 --port 9000` | Serve on a chosen address |
+| `python launch.py check` | Deployment preflight, 20 checks |
+| `python launch.py check --offline` | Preflight without live source calls |
+| `python launch.py cycle` | Run one collection cycle and exit |
+| `python launch.py tiles` | Warm the offline map cache (~16,600 tiles, ~195 MB) |
+| `python launch.py setup` | Create the venv and install dependencies only |
 
-```bash
-.\run.ps1 -Check
-```
+Requires Python 3.11+.
 
-To warm the offline map cache (~16,600 tiles, ~195 MB, one time):
-
-```bash
-.\run.ps1 -Tiles
-```
-
-Cross-platform equivalents:
-
-```bash
-python -m venv .venv && .venv/bin/pip install -r backend/requirements.txt
-cd backend && python -m uvicorn app.main:app --port 8000
-```
 
 Configuration is optional — every setting has a working default. Copy
 `.env.example` to `.env` only to change the refresh cadence or enable the fire
@@ -216,7 +213,7 @@ nepal-flood-watch/
 │   └── hazards/         outburst physics, quake, fire, earth rotation
 ├── frontend/            index.html, app.js, styles.css — no build step
 ├── docs/ARCHITECTURE.md
-└── run.ps1
+└── launch.py            cross-platform launcher
 ```
 
 The spiders follow Scrapy's `name` / `start_urls` / `parse` shape without the

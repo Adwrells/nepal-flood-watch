@@ -310,7 +310,8 @@ this system produces traces to a published relation or a stated weight.
 ## 11. Operations
 
 ```bash
-python -m app.preflight
+python launch.py check          # from the project root
+python -m app.preflight        # or directly, from backend/
 ```
 
 20 checks: environment, model correctness (band monotonicity, probability
