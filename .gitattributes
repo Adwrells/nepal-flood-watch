@@ -1,0 +1,12 @@
+# Shell scripts and container files MUST keep LF endings. A CRLF entrypoint.sh
+# fails inside a Linux container with a misleading "no such file or directory",
+# because the kernel reads the shebang as "/bin/sh\r".
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# Screenshots must never be line-ending converted.
+*.png binary
+*.jpg binary
