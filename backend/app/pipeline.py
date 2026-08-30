@@ -12,6 +12,8 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+from dateutil.parser import parse as dtparse
+
 from . import analytics, clean, db, excel
 from .config import settings
 from .hazards import outburst
@@ -23,6 +25,7 @@ from .spiders.bipad import BipadIncidentSpider
 from .spiders.dhm_river import DhmRiverSpider
 from .spiders.news import NewsSpider
 from .spiders.rainfall import RainfallSpider
+from .spiders.resources import ResourceSpider
 
 log = logging.getLogger("pipeline")
 
@@ -30,6 +33,10 @@ log = logging.getLogger("pipeline")
 HISTORY_WINDOW = 24
 
 LAST_RUN: dict = {"started": None, "finished": None, "sources": {}, "stations": 0}
+
+# The resource register barely changes (BIPAD's own records date from 2022), so
+# it is refreshed daily. Re-pulling 16k rows every 12 minutes would be waste.
+RESOURCE_REFRESH_HOURS = 24
 
 
 async def _safe(name: str, coro):
@@ -96,6 +103,37 @@ def prune() -> dict:
             if cur.rowcount > 0:
                 removed[table] = cur.rowcount
     return removed
+
+
+def _resources_are_stale() -> bool:
+    """True when the resource register has never been loaded or has aged out."""
+    with db.conn() as c:
+        row = c.execute("SELECT COUNT(*), MAX(updated) FROM resources").fetchone()
+    if not row or not row[0]:
+        return True
+    with db.conn() as c:
+        last = c.execute(
+            "SELECT finished FROM cycles WHERE notes LIKE '%resources%' ORDER BY finished DESC LIMIT 1"
+        ).fetchone()
+    if not last or not last[0]:
+        return True
+    try:
+        age = datetime.now().astimezone() - dtparse(last[0])
+    except (ValueError, TypeError):
+        return True
+    return age > timedelta(hours=RESOURCE_REFRESH_HOURS)
+
+
+def _persist_resources(rows) -> int:
+    if not rows:
+        return 0
+    with db.conn() as c:
+        c.executemany(
+            """INSERT OR REPLACE INTO resources
+               (id,kind,title,title_ne,lat,lon,ward,updated,source)
+               VALUES (:id,:kind,:title,:title_ne,:lat,:lon,:ward,:updated,:source)""",
+            rows)
+    return len(rows)
 
 
 def _persist(stations, rainfall, incidents, news, scores, hazards) -> None:
@@ -210,6 +248,12 @@ async def run_cycle() -> dict:
         stations, incidents, news = cleaned["stations"], cleaned["incidents"], cleaned["news"]
 
         rainfall = await _safe("rainfall", RainfallSpider(client).run(stations))
+
+        # Health facilities: only when the register is stale.
+        if _resources_are_stale():
+            rows = await _safe("resources", ResourceSpider(client).run("health"))
+            n = _persist_resources([r for r in rows if clean.in_nepal(r["lat"], r["lon"])])
+            log.info("resource register refreshed: %d health facilities", n)
 
     history = _history([s["id"] for s in stations])
     rain_by_id = {r["station_id"]: r for r in rainfall}

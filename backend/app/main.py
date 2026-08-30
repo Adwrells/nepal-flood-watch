@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, db, logs, pipeline, regions, tiles
+from . import analytics, db, emergency, logs, pipeline, regions, tiles
 from .config import NEPAL_BBOX, ROOT, settings
 from .hazards import earth_rotation, outburst
 from .scoring import BANDS, haversine_km
@@ -377,6 +377,43 @@ def nearby(lat: float, lon: float, radius_km: float = 30.0, limit: int = 40):
     out["query"] = {"lat": lat, "lon": lon, "radius_km": radius_km}
     out["counts"] = {k: len(v) for k, v in out.items() if isinstance(v, list)}
     return out
+
+
+@app.get("/api/emergency")
+def emergency_contacts(district: str | None = None):
+    """Verified emergency numbers, national plus district where we have them."""
+    return emergency.contacts(district)
+
+
+@app.get("/api/facilities/nearest")
+def nearest_facilities(lat: float, lon: float, limit: int = 10,
+                       radius_km: float = 25.0, kind: str = "health"):
+    """Closest health facilities to a point, nearest first.
+
+    Filters by bounding box in SQL before computing haversine in Python. Over
+    16,299 facilities, doing the trigonometry on every row would be pointless
+    work for a query that runs on every map click.
+    """
+    # 1 degree of latitude is ~111 km; longitude shrinks with latitude.
+    import math
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * max(math.cos(math.radians(lat)), 0.01))
+
+    with db.conn() as c:
+        rows = c.execute(
+            """SELECT * FROM resources
+               WHERE kind = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?""",
+            (kind, lat - dlat, lat + dlat, lon - dlon, lon + dlon),
+        ).fetchall()
+
+    out = []
+    for r in rows:
+        d = haversine_km(lat, lon, r["lat"], r["lon"])
+        if d <= radius_km:
+            out.append({**dict(r), "distance_km": round(d, 2)})
+    out.sort(key=lambda f: f["distance_km"])
+    return {"count": len(out), "returned": min(limit, len(out)),
+            "radius_km": radius_km, "facilities": out[:limit]}
 
 
 @app.get("/api/imagery/options")

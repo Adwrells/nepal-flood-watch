@@ -43,6 +43,7 @@
   /* Non-flood hazards deliberately sit outside the severity ramp. */
   --quake:   #A78BFA;
   --fire:    #F97316;
+  --facility:#22D3EE;
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
   --radius: 8px;
@@ -427,3 +428,98 @@ ol.actions li span { display: block; text-decoration: none; }
 }
 .ext-links { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
 .ext-links .btn { justify-content: center; font-size: 11px; min-height: 32px; }
+
+
+/* ---------- launch notice ---------- */
+.notice-backdrop {
+  position: fixed; inset: 0; z-index: 2000;
+  display: grid; place-items: center; padding: var(--s4);
+  background: rgba(3, 8, 18, .72);
+  backdrop-filter: blur(4px);
+}
+.notice-backdrop[hidden] { display: none; }
+
+.notice-card {
+  position: relative; width: min(460px, 100%); max-height: 88vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: var(--s5); box-shadow: var(--shadow);
+}
+.notice-close {
+  position: absolute; top: var(--s3); right: var(--s3);
+  background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1;
+  width: 32px; height: 32px; border-radius: 6px;
+}
+.notice-close:hover { background: var(--surface-2); color: var(--fg); }
+
+.notice-head { display: flex; gap: var(--s3); align-items: flex-start; margin-bottom: var(--s4); }
+.notice-crest { color: var(--danger); flex: none; margin-top: 2px; }
+.notice-head h2 { font-size: 16px; margin: 2px 0; }
+.notice-issuer { margin: 0; font-size: 10px; color: var(--muted); line-height: 1.4; }
+
+/* Tap-to-dial rows. Minimum 44px tall: this is the one control in the app
+   somebody might use one-handed, in the rain, in a hurry. */
+.tel-list { display: grid; gap: var(--s1); }
+.tel {
+  display: grid; grid-template-columns: 26px 1fr auto; gap: var(--s3);
+  align-items: center; min-height: 46px; padding: var(--s2) var(--s3);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: inherit; text-decoration: none;
+  transition: border-color .18s ease;
+}
+.tel:hover { border-color: var(--accent); }
+.tel-main { display: block; font-size: 13px; font-weight: 500; min-width: 0; }
+.tel-main .small { display: block; font-weight: 400; }
+.tel b { font-size: 16px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.tel-icon { display: grid; place-items: center; }
+.tel-icon.police { color: var(--accent); }
+.tel-icon.medical { color: var(--normal); }
+.tel-icon.disaster { color: var(--danger); }
+.tel-icon.fire { color: var(--fire); }
+
+.notice-note { margin: var(--s3) 0 0; }
+.notice-msg {
+  margin: var(--s4) 0; padding: var(--s3);
+  background: var(--surface-2); border-left: 3px solid var(--danger);
+  border-radius: 4px; font-size: 12px; line-height: 1.5;
+}
+.notice-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.notice-actions label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.notice-actions input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.link-btn {
+  background: none; border: 0; padding: 0; color: var(--accent);
+  font-size: inherit; text-decoration: underline;
+}
+
+/* ---------- updates tab ---------- */
+#updates { padding: 0 var(--s2) var(--s3); }
+#updates h4 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin: var(--s4) var(--s2) var(--s2);
+}
+.src-note { margin: 0 var(--s2) var(--s2); }
+.src-list { display: grid; gap: 2px; }
+.src {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s3); border-radius: var(--radius);
+  color: inherit; text-decoration: none; font-size: 12px;
+}
+.src:hover { background: var(--surface-2); }
+.src-main { flex: 1; min-width: 0; font-weight: 500; }
+.src-main .small { display: block; font-weight: 400; }
+.src-go { color: var(--muted); }
+
+/* ---------- popup map links ---------- */
+.popup-links {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--border);
+}
+.popup-links a {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: var(--surface); border: 1px solid var(--border); text-decoration: none;
+}
+.popup-links a:hover { border-color: var(--accent); }
+.copy-coord {
+  margin-left: auto; background: none; border: 0; color: var(--muted);
+  font-size: 10px; font-variant-numeric: tabular-nums; text-decoration: underline dotted;
+}

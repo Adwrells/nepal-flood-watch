@@ -9,6 +9,37 @@
 </head>
 <body data-theme="dark">
 
+<div class="notice-backdrop" id="notice" hidden>
+  <div class="notice-card" role="dialog" aria-modal="true" aria-labelledby="notice-title">
+    <button class="notice-close" id="notice-close" aria-label="Close notice">&times;</button>
+
+    <div class="notice-head">
+      <span class="notice-crest" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 3 6v6c0 5 3.8 9.2 9 10 5.2-.8 9-5 9-10V6l-9-4z"/>
+          <path d="M12 8v5M12 16h.01"/>
+        </svg>
+      </span>
+      <div>
+        <p class="notice-issuer">नेपाल सरकार · Government of Nepal</p>
+        <h2 id="notice-title">आपत्कालीन सहायता / Emergency helplines</h2>
+        <p class="notice-issuer">राष्ट्रिय विपद् जोखिम न्यूनीकरण तथा व्यवस्थापन प्राधिकरण (NDRRMA)</p>
+      </div>
+    </div>
+
+    <div class="notice-body" id="notice-numbers"></div>
+
+    <p class="notice-msg">आपतका बेला नआत्तिऔं, सजग र पूर्वतयार रहौं।<br>
+      <span class="muted">Do not panic in an emergency. Stay alert and prepared.</span></p>
+
+    <div class="notice-actions">
+      <label><input type="checkbox" id="notice-hide"> Do not show this again</label>
+      <button class="btn primary" id="notice-continue">Continue to the console</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="brand">
     <!-- Lucide "waves" -->
@@ -68,6 +99,7 @@
       <label><input type="checkbox" data-layer="events" checked> Events &amp; alerts</label>
       <label><input type="checkbox" data-layer="quakes" checked> Earthquakes</label>
       <label><input type="checkbox" data-layer="fires" checked> Active fires</label>
+      <label><input type="checkbox" data-layer="facilities"> Health facilities</label>
     </fieldset>
 
     <aside class="detail" id="detail" hidden aria-label="Station detail"></aside>
@@ -78,6 +110,7 @@
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-feeds" aria-controls="pane-feeds" aria-selected="true">Feeds</button>
       <button role="tab" id="tab-explore" aria-controls="pane-explore" aria-selected="false">Explore</button>
+      <button role="tab" id="tab-updates" aria-controls="pane-updates" aria-selected="false">Updates</button>
     </div>
 
     <div class="pane" id="pane-feeds" role="tabpanel" aria-labelledby="tab-feeds">
@@ -118,9 +151,13 @@
       <div class="nearby scroll" id="nearby"></div>
     </div>
 
+    <div class="pane" id="pane-updates" role="tabpanel" aria-labelledby="tab-updates" hidden>
+      <div class="scroll" id="updates"></div>
+    </div>
+
     <p class="disclaimer">
       Decision support only. DHM and MoHA issue Nepal's authoritative warnings.
-      Emergency toll-free: <strong>1155</strong>.
+      <button class="link-btn" id="show-emergency" type="button">Emergency numbers</button>
     </p>
   </section>
 </main>

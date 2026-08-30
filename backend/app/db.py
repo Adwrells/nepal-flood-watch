@@ -35,12 +35,20 @@ CREATE TABLE IF NOT EXISTS news (
     id TEXT PRIMARY KEY, title TEXT, url TEXT, published TEXT,
     source TEXT, districts TEXT
 );
+-- Health facilities and other BIPAD resources. A register, not a feed:
+-- refreshed daily rather than every cycle.
+CREATE TABLE IF NOT EXISTS resources (
+    id TEXT PRIMARY KEY, kind TEXT, title TEXT, title_ne TEXT,
+    lat REAL, lon REAL, ward INTEGER, updated TEXT, source TEXT
+);
 CREATE TABLE IF NOT EXISTS cycles (
     started TEXT PRIMARY KEY, finished TEXT, ok INTEGER, notes TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(station_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_ts   ON scores(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_hazard_kind ON hazard_events(kind, occurred_on DESC);
+-- Nearest-facility lookups scan by bounding box before computing haversine.
+CREATE INDEX IF NOT EXISTS idx_resources_geo ON resources(kind, lat, lon);
 """
 
 

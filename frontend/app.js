@@ -22,7 +22,9 @@ const state = {
   events: [],
   selected: null,
   filter: '',
-  layers: { gauges: true, impoundment: true, events: true, quakes: true, fires: true },
+  layers: { gauges: true, impoundment: true, events: true, quakes: true,
+            fires: true, facilities: false },
+  facilities: [],
   theme: localStorage.getItem('theme') || 'dark',
   region: 'NP',
   basemap: 'dark',
@@ -92,6 +94,7 @@ const groups = {
   gauges: L.layerGroup().addTo(map),
   impoundment: L.layerGroup().addTo(map),
   events: L.layerGroup().addTo(map),
+  facilities: L.layerGroup(),
   quakes: L.layerGroup().addTo(map),
   fires: L.layerGroup().addTo(map),
 };
@@ -127,7 +130,8 @@ function eventMarker(e) {
       <dt>Source</dt><dd>${esc(e.source || '-')}</dd>
       ${e.approximate ? '<dt>Location</dt><dd>district centroid, approximate</dd>' : ''}
     </dl>
-    ${safeUrl(e.url) ? `<a href="${safeUrl(e.url)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ''}`);
+    ${safeUrl(e.url) ? `<a href="${safeUrl(e.url)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ''}
+    ${mapLinks(e.lat, e.lon, e.title)}`);
   marker.on('click', () => exploreAt({ ...e, name: e.title }));
   return marker;
 }
@@ -207,6 +211,12 @@ map.on('zoomend', () => {
     drawMap();
     updateEventHint();
   }
+  if (state.layers.facilities) loadFacilities().then(drawFacilities);
+});
+
+// Facilities are fetched for the visible area, so panning refetches them.
+map.on('moveend', () => {
+  if (state.layers.facilities) loadFacilities().then(drawFacilities);
 });
 
 /* A layer that silently does nothing reads as a bug, so the toggle says why. */
@@ -592,8 +602,12 @@ $('#filter').addEventListener('input', (e) => { state.filter = e.target.value; r
 $('#theme').addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark'));
 
 document.querySelectorAll('[data-layer]').forEach((el) =>
-  el.addEventListener('change', () => {
+  el.addEventListener('change', async () => {
     state.layers[el.dataset.layer] = el.checked;
+    if (el.dataset.layer === 'facilities' && el.checked) {
+      await loadFacilities();
+      drawFacilities();
+    }
     syncLayers();
   }));
 
@@ -881,17 +895,18 @@ async function renderNearby(place) {
 }
 
 function showTab(which) {
-  const feeds = which === 'feeds';
+  ['feeds', 'explore', 'updates'].forEach((t) => {
+    $(`#pane-${t}`).hidden = t !== which;
+    $(`#tab-${t}`).setAttribute('aria-selected', String(t === which));
+  });
   if (typeof writeHash === 'function') writeHash();
-  $('#pane-feeds').hidden = !feeds;
-  $('#pane-explore').hidden = feeds;
-  $('#tab-feeds').setAttribute('aria-selected', String(feeds));
-  $('#tab-explore').setAttribute('aria-selected', String(!feeds));
-  if (!feeds && satMap) setTimeout(() => satMap.invalidateSize(), 0);
+  if (which === 'explore' && satMap) setTimeout(() => satMap.invalidateSize(), 0);
+  if (which === 'updates') renderUpdates();
 }
 
 $('#tab-feeds').addEventListener('click', () => showTab('feeds'));
 $('#tab-explore').addEventListener('click', () => showTab('explore'));
+$('#tab-updates').addEventListener('click', () => showTab('updates'));
 
 $('#imagery-layer').addEventListener('change', (e) => {
   state.satLayer = e.target.value;
@@ -967,6 +982,202 @@ async function applyHash() {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Emergency contacts and the launch notice
+// ---------------------------------------------------------------------------
+/* Rendered as markup rather than NDRRMA's poster image on purpose: numbers in a
+   JPEG cannot be tapped, copied, translated or read aloud by a screen reader,
+   and on a phone during a flood tap-to-dial is the entire point. The content and
+   the issuer are unchanged. */
+const KIND_ICON = {
+  police:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 5v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V5l-8-3z"/></svg>',
+  medical:  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  disaster: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 20h20L12 2z"/><path d="M12 9v5M12 17h.01"/></svg>',
+  fire:     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2s5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 1 0 1-1 1-2 0-3-2-4 0-6z"/></svg>',
+};
+
+let emergencyData = null;
+
+async function loadEmergency() {
+  if (emergencyData) return emergencyData;
+  emergencyData = await fetchJson('/api/emergency');
+  return emergencyData;
+}
+
+function contactRow(c) {
+  // tel: strips spaces; the displayed number keeps them for readability.
+  return `<a class="tel" href="tel:${esc(c.number.replace(/\s/g, ''))}">
+      <span class="tel-icon ${esc(c.kind)}">${KIND_ICON[c.kind] || ''}</span>
+      <span class="tel-main">${esc(c.label)}
+        <span class="muted small">${esc(c.label_ne)}</span></span>
+      <b>${esc(c.number)}</b>
+    </a>`;
+}
+
+async function renderNotice() {
+  const d = await loadEmergency();
+  $('#notice-numbers').innerHTML =
+    `<div class="tel-list">${d.national.map(contactRow).join('')}</div>` +
+    `<p class="muted small notice-note">${esc(d.note)}</p>`;
+}
+
+/* Shown once per browser unless dismissed permanently. A warning system that
+   nags on every reload gets dismissed reflexively, which defeats it. */
+function openNotice() {
+  $('#notice').hidden = false;
+  renderNotice();
+  $('#notice-continue').focus();
+}
+
+function closeNotice() {
+  if ($('#notice-hide').checked) {
+    try { localStorage.setItem('noticeAck', '1'); } catch { /* private mode */ }
+  }
+  $('#notice').hidden = true;
+}
+
+$('#notice-close').addEventListener('click', closeNotice);
+$('#notice-continue').addEventListener('click', closeNotice);
+$('#notice').addEventListener('click', (e) => { if (e.target.id === 'notice') closeNotice(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#notice').hidden) closeNotice();
+});
+$('#show-emergency').addEventListener('click', openNotice);
+
+// ---------------------------------------------------------------------------
+// Updates tab: official sources
+// ---------------------------------------------------------------------------
+/* Facebook pages are LINKED, not scraped. Reading a Page's posts needs the
+   Graph API with a token for a Page you administer; scraping facebook.com HTML
+   breaks their Terms of Service. These are public officials' pages we do not
+   administer, so a link is the honest and legal option -- and it opens the real
+   post with its comments and video, which no scrape would reproduce. */
+const OFFICIAL_SOURCES = [
+  { group: 'Government', items: [
+    { name: 'NDRRMA', detail: 'National Disaster Risk Reduction & Management Authority',
+      url: 'https://bipadportal.gov.np/' },
+    { name: 'DHM', detail: 'Hydrology & Meteorology — flood bulletins',
+      url: 'https://www.dhm.gov.np/' },
+    { name: 'Nepal Police', detail: 'Official updates', url: 'https://www.nepalpolice.gov.np/' },
+  ]},
+  { group: 'Representatives', items: [
+    { name: 'Balen Shah', detail: 'Mayor, Kathmandu Metropolitan City',
+      url: 'https://www.facebook.com/balenOfficial' },
+    { name: 'Sudan Gurung', detail: 'Hami Nepal',
+      url: 'https://www.facebook.com/sudangrghaminepal/' },
+    { name: 'Swarnim Wagle', detail: 'Member of Parliament',
+      url: 'https://www.facebook.com/swarnim.wagle' },
+  ]},
+];
+
+async function renderUpdates() {
+  const news = await fetchJson('/api/news?limit=40');
+
+  const links = OFFICIAL_SOURCES.map((g) => `
+    <h4>${esc(g.group)}</h4>
+    <div class="src-list">
+      ${g.items.map((i) => `
+        <a class="src" href="${safeUrl(i.url)}" target="_blank" rel="noopener noreferrer">
+          <span class="src-main">${esc(i.name)}
+            <span class="muted small">${esc(i.detail)}</span></span>
+          <span class="src-go" aria-hidden="true">&#8599;</span>
+        </a>`).join('')}
+    </div>`).join('');
+
+  $('#updates').innerHTML = `
+    <h4>Live headlines <span class="muted">${news.length}</span></h4>
+    <p class="muted small src-note">Scraped from five Nepali news feeds every cycle.</p>
+    ${news.length ? news.map((n) => `
+      <a class="feed-item" href="${safeUrl(n.url)}" target="_blank" rel="noopener noreferrer">
+        <div class="t">${esc(n.title)}</div>
+        <div class="s">${esc(n.source)}${n.districts ? ' · ' + esc(n.districts) : ''}</div>
+      </a>`).join('') : '<p class="empty">No flood headlines right now.</p>'}
+
+    ${links}
+    <p class="muted small src-note">
+      Social pages open in a new tab. Their posts are not copied into this
+      console: reading them programmatically needs Graph API access to Pages we
+      do not administer.
+    </p>`;
+}
+
+// ---------------------------------------------------------------------------
+// Health facilities
+// ---------------------------------------------------------------------------
+/* 16,299 facilities nationally, so they are fetched for the visible area only
+   and above a zoom threshold -- plotting all of them at country zoom would be a
+   solid block of markers and tell an operator nothing. */
+const FACILITY_ZOOM = 10;
+
+async function loadFacilities() {
+  if (!state.layers.facilities || map.getZoom() < FACILITY_ZOOM) {
+    state.facilities = [];
+    return;
+  }
+  const c = map.getCenter();
+  const radius = Math.min(30, map.getBounds().getNorthEast()
+    .distanceTo(map.getBounds().getSouthWest()) / 2000);
+  try {
+    const d = await fetchJson(
+      `/api/facilities/nearest?lat=${c.lat}&lon=${c.lng}&limit=250&radius_km=${radius.toFixed(1)}`);
+    state.facilities = d.facilities;
+  } catch { state.facilities = []; }
+}
+
+function drawFacilities() {
+  groups.facilities.clearLayers();
+  if (map.getZoom() < FACILITY_ZOOM) return;
+  state.facilities.forEach((f) => {
+    L.circleMarker([f.lat, f.lon], {
+      radius: 5, fillColor: cssVar('--facility'), fillOpacity: 0.9,
+      color: '#fff', weight: 1,
+    }).bindPopup(`
+        <h3>${esc(f.title)}</h3>
+        <dl>
+          <dt>Type</dt><dd>Health facility</dd>
+          <dt>Distance</dt><dd>${f.distance_km} km from map centre</dd>
+          <dt>Source</dt><dd>${esc(f.source)}</dd>
+        </dl>
+        ${mapLinks(f.lat, f.lon, f.title)}`)
+      .addTo(groups.facilities);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Open a coordinate in an external map
+// ---------------------------------------------------------------------------
+/* Every popup offers this. Deep links, not embedded tiles: Google's terms do
+   not permit proxying their tiles, but linking out is free and gives the user
+   Street View and turn-by-turn directions, which matter when the question is
+   "how do I actually get there". */
+function mapLinks(lat, lon, label = '') {
+  const q = `${lat},${lon}`;
+  const links = [
+    ['Google', `https://www.google.com/maps/search/?api=1&query=${q}`],
+    ['Directions', `https://www.google.com/maps/dir/?api=1&destination=${q}`],
+    ['OSM', `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`],
+  ];
+  return `<div class="popup-links">
+    ${links.map(([t, u]) =>
+      `<a href="${safeUrl(u)}" target="_blank" rel="noopener noreferrer">${t}</a>`).join('')}
+    <button class="copy-coord" data-coord="${q}" title="Copy coordinates">${q}</button>
+  </div>`;
+}
+
+// Popups are created on demand, so the copy button is bound by delegation.
+map.on('popupopen', (e) => {
+  const btn = e.popup.getElement().querySelector('.copy-coord');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(btn.dataset.coord).then(() => {
+      const was = btn.textContent;
+      btn.textContent = 'copied';
+      setTimeout(() => { btn.textContent = was; }, 1200);
+    }).catch(() => { /* clipboard blocked; the text is selectable anyway */ });
+  });
+});
+
 /* Region selector. Nepal is the only enabled region today; the others are
    listed but disabled so the extension point is visible rather than implied. */
 async function loadRegions() {
@@ -996,6 +1207,10 @@ $('#region').addEventListener('change', (e) => {
 applyTheme(state.theme);
 updateEventHint();
 loadRegions();
+// The notice leads, because knowing who to call matters more than the map.
+try {
+  if (!localStorage.getItem('noticeAck')) openNotice();
+} catch { openNotice(); }
 // A station link cannot resolve until the station list exists.
 refresh().then(applyHash);
 setInterval(refresh, POLL_MS);
