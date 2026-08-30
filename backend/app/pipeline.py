@@ -80,8 +80,16 @@ def _history(station_ids: list[int]) -> dict[int, list]:
 # they were current. Anything the model actually uses has a much shorter
 # horizon than these limits.
 RETENTION_DAYS = {
-    "readings": 90,     # history for forecasts and the impoundment baseline
-    "scores": 30,
+    # Readings are IRREPLACEABLE and cheap. DHM publishes only the current
+    # value -- there is no historical API -- so a reading not captured is gone
+    # for good, and every predictive signal (rise rate, forecast, impoundment
+    # baseline) is computed from this table. 90 days costs ~27 MB. Keep it.
+    "readings": 90,
+    # Scores are DERIVABLE from readings + rainfall and were 83% of the
+    # database at 30 days (~132 MB) for data the UI only ever reads back a few
+    # days of. Seven days covers the history charts and the trend display;
+    # anything older can be recomputed if it is ever wanted.
+    "scores": 7,
     "incidents": 60,
     "news": 30,
     "hazard_events": 90,
