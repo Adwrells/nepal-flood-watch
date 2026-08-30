@@ -257,11 +257,103 @@ ol.actions li span { display: block; text-decoration: none; }
   .panel.right { display: none; }
   .detail { width: 300px; }
 }
+
+/* ---------- phones ----------
+   Verified at 375x812 rather than assumed. The desktop three-column layout
+   cannot survive here, so the page becomes a single scrolling column with the
+   map given a fixed, generous height instead of a grid fraction -- `1fr` in a
+   grid whose parent is 100vh left a dead black band below the map. */
 @media (max-width: 820px) {
-  main { grid-template-columns: 1fr; grid-template-rows: 260px 1fr; }
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;               /* the page scrolls; the panes do not */
+  }
+
+  main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  /* The header stacks: identity on one line, controls wrapping beneath it. */
+  header {
+    flex-wrap: wrap;
+    gap: var(--s2);
+    padding: var(--s2) var(--s3);
+  }
+  .brand { flex: 1 1 100%; }
+  .brand h1 { font-size: 14px; white-space: nowrap; }
+  .brand small { font-size: 10px; }
+  .status-line { flex-wrap: wrap; }
+
+  .region-select { flex: 1 1 auto; }
+  .region-select select { width: 100%; }
+  .actions { flex: 1 1 auto; justify-content: flex-end; }
+
+  /* KPIs are the headline numbers -- worth keeping, scrolled sideways rather
+     than hidden as they were before. */
+  .kpis {
+    display: flex;
+    order: 3;
+    flex: 1 1 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .kpis::-webkit-scrollbar { display: none; }
+  .kpi { flex: 0 0 auto; min-width: 74px; }
+
+  /* A list of one row is not a list. */
   .panel { border-right: none; border-bottom: 1px solid var(--border); }
-  .kpis { display: none; }
-  .detail { width: auto; left: var(--s3); }
+  .panel .scroll { max-height: 45vh; }
+
+  .map-wrap { height: 65vh; min-height: 380px; }
+
+  /* Overlays covered most of a narrow map, so they collapse to a compact
+     corner control instead of a permanent panel. */
+  .layers {
+    max-width: 46vw;
+    padding: var(--s1) var(--s2);
+    font-size: 11px;
+    opacity: .93;
+  }
+  .layers label { padding: 1px 0; font-size: 11px; }
+  .layers legend { font-size: 9px; }
+  .layers.basemaps { bottom: var(--s2); }
+
+  .detail {
+    position: fixed;
+    inset: auto var(--s2) var(--s2) var(--s2);
+    width: auto;
+    max-height: 70vh;
+  }
+
+  .disclaimer { font-size: 9px; }
+}
+
+/* The launch notice must always fit, and its Continue button must always be
+   reachable -- it was being clipped off the bottom of a phone screen. */
+@media (max-width: 820px), (max-height: 700px) {
+  .notice-backdrop { align-items: flex-start; padding: var(--s2); }
+  .notice-card {
+    max-height: calc(100vh - var(--s4));
+    padding: var(--s4) var(--s3);
+  }
+  .notice-head h2 { font-size: 14px; }
+  .tel { min-height: 44px; }         /* still a comfortable tap target */
+  .tel b { font-size: 15px; }
+  .notice-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding-top: var(--s2);
+    margin-top: var(--s2);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .notice-actions .btn.primary { flex: 1 1 auto; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
