@@ -1,0 +1,60 @@
+# Continuous integration.
+#
+# Deliberately NOT GitHub's python-app.yml template: that runs pytest and
+# flake8, neither of which this project uses, and it knows nothing about the
+# preflight — which is where the real checks live.
+#
+# Deployment is a separate concern and lives in CICD-AWS.md. It stays out of
+# this file because it needs AWS credentials and a tracked Dockerfile, and a CI
+# run should never be blocked on either.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      # --offline on purpose. The live checks talk to DHM, BIPAD, USGS and five
+      # news feeds; if one of them is down that is their outage, not a broken
+      # commit, and it must not block a merge that fixes something unrelated.
+      # The model checks — band monotonicity, probability bounds, the
+      # Tangjiashan DBI, the length-of-day calculation, the cleaning rules —
+      # all run offline and are the ones that catch a bad refactor.
+      - name: Preflight
+        working-directory: backend
+        run: python -m app.preflight --offline
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # There is no build step and no bundler, so a syntax check is the whole
+      # job. It still earns its place: app.js is edited by patch scripts, and a
+      # broken template literal is invisible until the page silently fails.
+      - name: Syntax-check the frontend
+        run: node --check frontend/app.js

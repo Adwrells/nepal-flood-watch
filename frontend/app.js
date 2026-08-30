@@ -956,6 +956,7 @@ function writeHash() {
     const parts = [];
     if (state.selected) parts.push(`station=${state.selected}`);
     if (!$('#pane-explore').hidden) parts.push('tab=explore');
+    else if (!$('#pane-updates').hidden) parts.push('tab=updates');
     if (state.theme !== 'dark') parts.push(`theme=${state.theme}`);
     if (state.basemap !== 'dark') parts.push(`basemap=${state.basemap}`);
     if (state.satLayer !== 'esri') parts.push(`imagery=${state.satLayer}`);
@@ -977,9 +978,10 @@ async function applyHash() {
     if (st) {
       await selectStation(st.id);
       if (h.tab === 'explore') await exploreAt(st);
+      else if (h.tab) showTab(h.tab);
     }
-  } else if (h.tab === 'explore') {
-    showTab('explore');
+  } else if (h.tab && ['feeds', 'explore', 'updates'].includes(h.tab)) {
+    showTab(h.tab);
   }
 }
 
@@ -1264,6 +1266,10 @@ let sse = null;
 let sseRetry = 0;
 
 function connectLive() {
+  // An open event stream never goes network-idle, which hangs headless capture
+  // and any crawler that waits for quiescence. #nolive=1 opts out; the 5-minute
+  // fallback poll still keeps such a client current.
+  try { if (readHash().nolive) { setLiveState('offline'); return; } } catch { /* no hash */ }
   if (sse) sse.close();
   try {
     sse = new EventSource('/api/stream');
@@ -1354,7 +1360,10 @@ updateEventHint();
 loadRegions();
 // The notice leads, because knowing who to call matters more than the map.
 try {
-  if (!localStorage.getItem('noticeAck')) openNotice();
+  // ack=1 in the hash suppresses it for a deep link that is meant to land
+  // straight on a view -- a shared link to one gauge should not open a modal.
+  const acked = localStorage.getItem('noticeAck') || readHash().ack;
+  if (!acked) openNotice();
 } catch { openNotice(); }
 // A station link cannot resolve until the station list exists.
 refresh().then(applyHash);

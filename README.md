@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <img alt="CI" src="https://github.com/Adwrells/nepal-flood-watch/actions/workflows/ci.yml/badge.svg">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white">
@@ -61,6 +62,11 @@ the state-owned *Rising Nepal*.
 It also carries a hazard model that a gauge-threshold system cannot express:
 **landslide- and moraine-dammed lake outburst floods**, the class of event that
 struck Rasuwa in July 2025.
+
+Around that sit the things an operator needs *next*: verified emergency numbers,
+the nearest of Nepal's 16,295 health facilities, official relief-fund channels,
+flood safety guidance, and live headlines — pushed to the browser the moment a
+cycle finishes rather than polled for.
 
 ### How a cycle works
 
@@ -249,6 +255,83 @@ calculation.
 
 ---
 
+## Emergency response
+
+### The numbers, verified
+
+Every contact records its source and whether it was independently confirmed.
+This corrected a real error: the console previously showed **1155** as *the*
+emergency line. 1155 is the Nepal Police public helpline — the disaster hotline
+is **1149** (NEOC) and the health line is **1115** (HEOC), confirmed against
+`heoc.mohp.gov.np`.
+
+![Launch notice with tap-to-dial emergency numbers](docs/images/launch-notice.png)
+
+The notice is **markup, not the poster image**. Numbers in a JPEG cannot be
+tapped, copied, translated or read aloud by a screen reader — and on a phone
+during a flood, tap-to-dial is the entire point. Rows are 46 px for one-handed
+use. It appears once, and remembers being dismissed.
+
+### Nearest health facilities
+
+16,295 geocoded sites from BIPAD's resource register, refreshed **daily** rather
+than per cycle — the source records date from 2022, so re-pulling 16k rows every
+12 minutes would be waste and a discourtesy to a government server.
+
+```bash
+curl '/api/facilities/nearest?lat=28.28&lon=85.38&limit=3'
+#   4.45 km  Timure Health Post Rasuwa
+#   6.27 km  Dahalfedi Community Health Unit
+#   8.69 km  Thuman SHP
+```
+
+Queries filter by bounding box in SQL before computing haversine; doing the
+trigonometry on all 16,295 rows for every map click would be pointless work.
+
+Every map popup also offers **Google Maps, Directions, OpenStreetMap** and a
+copy-coordinates button.
+
+---
+
+## Updates, safety and relief
+
+![Updates tab with live headlines and official sources](docs/images/updates-tab.png)
+
+**Live headlines** scraped from five Nepali feeds, alongside links to NDRRMA,
+DHM, Nepal Police, WHO, UN OCHA, IFRC, UNICEF, ReliefWeb, and the pages of
+elected representatives.
+
+Those pages are **linked, not scraped**. Reading a Facebook Page's posts
+requires Graph API access to a Page you administer; these belong to public
+figures and organisations we do not administer. A link is the honest option —
+and it opens the real post, with its comments and video, which no scrape would
+reproduce.
+
+**Flood safety guidance** is split into *do* and *do not*, because the failure
+mode in floods is people acting wrongly with confidence rather than freezing.
+The do-not list leads with walking and driving through water — consistently the
+largest causes of flood deaths — and includes this system's own outburst
+signature: *a channel that has gone unusually dry can mean an upstream blockage
+is about to fail.*
+
+### Donations: links only, deliberately
+
+The relief section links to the Government of Nepal's official payment pages.
+It **does not reproduce bank account numbers and does not generate QR codes.**
+
+The Prime Minister's Office has publicly warned that individuals and groups are
+circulating unofficial QR codes and personal account numbers to collect relief
+money. A QR code this app draws itself would be indistinguishable, to whoever
+scans it, from exactly that. A transposed digit also sends money somewhere
+unrecoverable, and a hardcoded copy goes stale silently while a link does not.
+
+Verified destinations: **pmdrf.nchl.com.np**, operated by Nepal Clearing House
+Ltd for the government, and the Himalayan Bank gateway named in the PMO notice.
+The PMO's own rule is shown prominently — *the recipient name must read "Prime
+Minister Disaster Relief Fund"*.
+
+---
+
 ## Outputs
 
 **Interactive console** — dark and light themes, five toggleable map layers
@@ -293,12 +376,28 @@ Alongside the imagery, `/api/nearby` lists BIPAD incidents, gauges, quakes and
 headlines within 30 km with distances — a MODIS pixel cannot see a washed-out
 footbridge, and an incident report cannot show how far water has spread.
 
+**Live, not polled.** Server-sent events push an update the moment a cycle
+finishes. The console is watched for hours at a time, and a 60-second poll meant
+a new DANGER reading could sit unseen for most of a minute. A 5-minute poll
+remains as a fallback where SSE is blocked, and the header carries a live
+indicator.
+
 Any view is deep-linkable, so a shift handover can point at one gauge rather
 than at "the dashboard":
 
 ```
 /#station=186&tab=explore&imagery=flood
 ```
+
+| Hash key | Does |
+|---|---|
+| `station` | Open this gauge's detail drawer |
+| `tab` | `feeds`, `explore` or `updates` |
+| `theme` | `dark` or `light` |
+| `basemap` | `dark`, `light` or `esri` |
+| `imagery` | `esri`, `truecolor`, `flood` or `viirs` |
+| `ack=1` | Skip the launch notice |
+| `nolive=1` | Disable SSE — an open stream never goes network-idle, which hangs headless capture |
 
 **Excel workbook** — six sheets, rewritten atomically every cycle: Dashboard
 (band counts and the top 25), Stations (the full scored table with conditional
@@ -320,6 +419,11 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/outburst/alerts` | Gauges showing the impoundment signature |
 | `GET /api/outburst/scenario` | Breach model; accepts `volume_m3` and `head_m` |
 | `GET /api/explain/earth-rotation` | The length-of-day calculation |
+| `GET /api/emergency` | Verified emergency contacts, national and district |
+| `GET /api/facilities/nearest` | Closest health facilities to a point |
+| `GET /api/nearby` | Incidents, gauges, quakes and headlines around a point |
+| `GET /api/relief` | Official donation channels and the PMO safety rule |
+| `GET /api/stream` | Server-sent events, one per completed cycle |
 | `GET /api/health` | Per-source status and data-quality report |
 | `POST /api/refresh` | Force a cycle now |
 | `GET /api/export.xlsx` · `/api/export.json` | Current exports |
@@ -339,11 +443,15 @@ nepal-flood-watch/
 │   ├── excel.py         six-sheet workbook, atomic write
 │   ├── tiles.py         local OSM tile cache, clipped to Nepal
 │   ├── regions.py       region registry — the extension point
+│   ├── emergency.py     verified contacts, each with its source
+│   ├── relief.py        official donation links (no account numbers, by design)
+│   ├── logs.py          rotating file logs, UTF-8 pinned
 │   ├── preflight.py     20 deployment checks
 │   ├── spiders/         one file per source, Scrapy-shaped
 │   └── hazards/         outburst physics, quake, fire, earth rotation
 ├── frontend/            index.html, app.js, styles.css — no build step
-├── docs/ARCHITECTURE.md
+├── deploy/              litestream.yml, entrypoint.sh
+├── docs/                ARCHITECTURE.md, DEPLOY-AWS.md, images/
 └── launch.py            cross-platform launcher
 ```
 
@@ -394,6 +502,11 @@ as **exactly one instance** (the scheduler lives in the web process, so a second
 task scrapes every source twice), and it needs **persistent storage** (the
 reading history behind every forecast and the impoundment baseline lives in
 `flood.db`).
+
+The database replicates continuously to S3 with **Litestream**, so a redeploy
+or a lost volume does not cost the gauge history. That was verified rather than
+assumed: the Docker volume was deleted outright and a fresh container restored
+the full history from object storage.
 
 The whole ECR to ECS path is rehearsable locally against
 [Floci](https://floci.io) before touching real AWS.
