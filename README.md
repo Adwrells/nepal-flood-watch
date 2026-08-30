@@ -6,6 +6,8 @@
 
 <p align="center">
   <img alt="CI" src="https://github.com/Adwrells/nepal-flood-watch/actions/workflows/ci.yml/badge.svg">
+  <img alt="CodeQL" src="https://github.com/Adwrells/nepal-flood-watch/actions/workflows/codeql.yml/badge.svg">
+  <img alt="License Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white">
@@ -522,6 +524,22 @@ the full history from object storage.
 
 The whole ECR to ECS path is rehearsable locally against
 [Floci](https://floci.io) before touching real AWS.
+
+---
+
+## Licence
+
+**Apache License 2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Apache rather than MIT for two reasons that matter to this project specifically:
+it carries an **explicit patent grant**, and an **explicit limitation of
+liability** — which is not boilerplate for software that outputs flood
+predictions someone might act on. Permissive rather than copyleft because the
+point is adoption by government agencies and responders, and a copyleft licence
+would deter exactly that.
+
+`NOTICE` records the third-party data sources and their terms, and states
+plainly that this is decision support rather than an official warning service.
 
 ---
 

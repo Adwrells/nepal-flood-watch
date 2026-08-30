@@ -1,0 +1,80 @@
+Nepal Flood Watch
+Copyright 2026 Nepal Flood Watch contributors
+
+This product includes software developed by the Nepal Flood Watch contributors.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+================================================================================
+NOT AN OFFICIAL WARNING SERVICE
+================================================================================
+
+This software produces decision support, not authoritative warnings.
+
+Nepal's official flood warnings are issued by the Department of Hydrology and
+Meteorology (DHM) and the Ministry of Home Affairs (MoHA). Where this software
+disagrees with them, they are correct.
+
+Emergency numbers in Nepal:
+    100     Nepal Police
+    102     Ambulance
+    1115    Health helpline (HEOC)
+    1149    National Emergency Operation Centre
+    1234    District Emergency Operation Centre
+
+The forecast in this software performs at approximately parity with a naive
+persistence baseline and is not validated against labelled flood outcomes. Its
+measured skill, uncertainty calibration and known error sources are published in
+docs/ANALYTICS.md. Anyone deploying this operationally should read that document
+first and re-measure against their own data.
+
+================================================================================
+DATA SOURCES AND ATTRIBUTION
+================================================================================
+
+This software retrieves data from third parties. Their data is not covered by
+the Apache License above, and their terms govern its use.
+
+Department of Hydrology and Meteorology (DHM), Government of Nepal
+    River gauge levels, warning and danger marks
+    https://www.dhm.gov.np/
+
+BIPAD Portal, Ministry of Home Affairs, Government of Nepal
+    Disaster incidents and the health facility register
+    https://bipadportal.gov.np/
+
+Open-Meteo
+    Observed and forecast precipitation
+    https://open-meteo.com/  -- CC BY 4.0
+
+United States Geological Survey (USGS)
+    Earthquake catalogue
+    https://earthquake.usgs.gov/
+
+NASA FIRMS / EOSDIS GIBS
+    Active fire detections; MODIS and VIIRS imagery
+    https://firms.modaps.eosdis.nasa.gov/  https://worldview.earthdata.nasa.gov/
+
+Esri and its data providers (Maxar, Earthstar Geographics, HERE, Garmin)
+    Basemap cartography and satellite imagery
+    https://www.esri.com/
+
+OpenStreetMap contributors
+    Underlying map data
+    https://www.openstreetmap.org/copyright  -- ODbL
+
+Nepali news publishers
+    The Rising Nepal, The Kathmandu Post, Online Khabar, Nepal News, Ratopati
+    Headlines are linked, never republished in full.
+
+================================================================================
+DELIBERATE OMISSIONS
+================================================================================
+
+Facebook, Google Maps and Waze content is linked, not retrieved. Reading it
+programmatically would require access this project does not have and would
+breach those services' terms.
+
+Bank account numbers and donation QR codes are deliberately NOT reproduced. The
+Office of the Prime Minister has warned that unofficial QR codes and personal
+accounts circulate after disasters; this software links to the government's own
+payment pages instead.
