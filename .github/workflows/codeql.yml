@@ -1,0 +1,56 @@
+# CodeQL semantic analysis.
+#
+# Worth having here specifically because this codebase parses untrusted input
+# from six external sources and renders it into a page: RSS titles, BIPAD
+# incident text, station names and feed URLs all cross a trust boundary. One
+# XSS hole through an unescaped feed URL was already found and fixed by hand;
+# CodeQL is what catches the next one.
+#
+# security-extended goes beyond the default suite — the extra queries cover
+# taint paths through string building, which is exactly the shape of the bug
+# class that matters here.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so newly published queries run against unchanged code. Monday
+    # early UTC keeps it clear of the working day in Nepal (UTC+05:45).
+    - cron: '17 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      security-events: write     # required to upload results to the Security tab
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      # No build step: the backend is plain Python and the frontend is one
+      # unbundled file, so CodeQL's own extraction is sufficient.
+      - name: Analyse
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

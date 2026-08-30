@@ -289,6 +289,20 @@ def health():
     return {"cycle_minutes": settings.cycle_minutes, "bbox": NEPAL_BBOX, **pipeline.LAST_RUN}
 
 
+@app.get("/api/errors")
+def errors(limit: int = 100, summary: bool = False):
+    """Recent warnings and errors, from the structured log.
+
+    A fault that only exists in a file on the server is a fault nobody sees.
+    `summary=true` groups them so a chronic failure is distinguishable from a
+    one-off -- the FIRMS key being unset logs every cycle and would otherwise
+    drown out something that broke once.
+    """
+    if summary:
+        return logs.error_summary()
+    return {"errors": logs.recent_errors(limit)}
+
+
 @app.post("/api/refresh")
 async def refresh():
     """Force a cycle now (the UI's refresh button)."""

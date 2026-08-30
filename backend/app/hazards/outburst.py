@@ -27,11 +27,40 @@ G = 9.80665          # m/s^2
 RHO_W = 1000.0       # kg/m^3
 
 # Basins with a transboundary or glacial headwater, where the impounding barrier
-# can form outside Nepal's gauge network. These get the lowest alarm threshold.
+# can form outside Nepal's gauge network.
+#
+# These MUST be DHM's own basin vocabulary, not tributary names. An earlier
+# version listed "bhote koshi", "trishuli", "tama koshi" and so on; DHM records
+# those gauges under the major basin they drain into, so only "Karnali" of ten
+# entries ever matched and the lower threshold never reached the Tibet-fed
+# headwaters it exists for.
 TRANSBOUNDARY_BASINS = {
-    "bhote koshi", "trishuli", "arun", "sun koshi", "tama koshi",
-    "karnali", "humla karnali", "marsyangdi", "budhi gandaki", "seti",
+    "koshi", "narayani", "karnali", "mahakali", "bheri", "babai",
 }
+
+# The basin alone is coarse: "Narayani" covers both the Trishuli headwaters at
+# the Tibetan border and the plains at Chitwan. Station names carry the actual
+# headwater identity, so they refine it.
+HEADWATER_NAMES = (
+    "bhote", "trishuli", "langtang", "tama koshi", "tamakoshi", "arun",
+    "sun koshi", "sunkoshi", "marsyangdi", "budhi gandaki", "budhigandaki",
+    "seti", "kali gandaki", "kaligandaki", "humla", "rasuwa", "dudh koshi",
+)
+
+# Absolute floors, which the proportional test alone cannot provide.
+# A gauge must have enough water in it for a percentage to mean anything, and
+# the fall must be large enough in metres to be a river being held back rather
+# than a shallow stream receding after rain.
+MIN_BASELINE_M = 0.50
+MIN_DROP_M = 0.30
+
+
+def is_transboundary(station) -> bool:
+    """True for gauges on a Tibet-fed or glacial headwater reach."""
+    basin = (station.get("basin") or "").strip().lower()
+    name = (station.get("name") or "").strip().lower()
+    return (basin in TRANSBOUNDARY_BASINS
+            and any(h in name for h in HEADWATER_NAMES))
 
 
 # ---------------------------------------------------------------------------
@@ -78,22 +107,34 @@ def detect_impoundment(station, recent_levels, rain_past_24h, rain_next_12h) -> 
                                  rain_past_24h or 0.0, "no usable baseline", "low")
 
     anomaly = max(0.0, (baseline - current) / baseline)
+    drop_m = max(0.0, baseline - current)
     rain = (rain_past_24h or 0.0) + (rain_next_12h or 0.0)
 
     # Transboundary headwaters get a lower bar: the barrier may form entirely
     # outside our observation network, so we cannot wait for confirmation.
-    is_transboundary = basin in TRANSBOUNDARY_BASINS
-    drop_threshold = 0.10 if is_transboundary else 0.15
-    rain_threshold = 15.0 if is_transboundary else 25.0
+    transboundary = is_transboundary(station)
+    drop_threshold = 0.10 if transboundary else 0.15
+    rain_threshold = 15.0 if transboundary else 25.0
+
+    # A shallow gauge cannot support a proportional test. On a 0.1 m urban
+    # khola a 76% fall is 8 cm of ordinary recession, and treating that as a
+    # dammed river buries the real signal in noise.
+    too_shallow = baseline < MIN_BASELINE_M
+    if too_shallow:
+        return ImpoundmentSignal(
+            station["id"], name, basin, False, round(anomaly, 3), round(rain, 1),
+            f"gauge too shallow to assess ({baseline:.2f} m baseline)", "low")
 
     if anomaly >= drop_threshold:
-        reasons.append(f"stage down {anomaly:.0%} vs prior median")
+        reasons.append(f"stage down {anomaly:.0%} ({drop_m:.2f} m) vs prior median")
     if rain >= rain_threshold:
         reasons.append(f"{rain:.0f} mm rain on catchment")
-    if is_transboundary:
+    if transboundary:
         reasons.append("transboundary/glacial headwater - barrier may be unobserved")
 
-    suspected = anomaly >= drop_threshold and rain >= rain_threshold
+    suspected = (anomaly >= drop_threshold
+                 and drop_m >= MIN_DROP_M
+                 and rain >= rain_threshold)
     if not suspected:
         confidence = "low"
     elif anomaly >= 0.30 and rain >= 50:

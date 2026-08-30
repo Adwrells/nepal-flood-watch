@@ -9,6 +9,7 @@ snapshot.json
 
 # --- graphify knowledge graph (regenerable via /graphify) ---
 graphify-out/
+.codeql/
 
 # --- container (local only, not published yet) ---
 Dockerfile

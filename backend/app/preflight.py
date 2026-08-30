@@ -133,7 +133,21 @@ def c_outburst():
     assert lo > 0 and hi / lo < 100, f"discharge envelope implausible: {lo}-{hi}"
     # Celerity must be a physically sane flood-wave speed for a mountain river.
     assert 3 < s["wave_celerity_ms"] < 20, f"celerity {s['wave_celerity_ms']} m/s out of range"
-    return f"Tangjiashan DBI {dbi['dbi']} unstable; celerity {s['wave_celerity_ms']} m/s"
+    # The transboundary list must speak DHM's basin vocabulary, not tributary
+    # names -- an earlier version matched almost nothing.
+    assert outburst.is_transboundary({"basin": "Narayani", "name": "Bhote Koshi at Rasuwagadi"}), \
+        "Tibet-fed headwater not recognised as transboundary"
+    assert not outburst.is_transboundary({"basin": "Bagmati", "name": "Nakkhu at Bungmati"}), \
+        "valley stream wrongly treated as transboundary"
+
+    # A shallow gauge must not fire on a large percentage of a tiny number.
+    shallow = outburst.detect_impoundment(
+        {"id": 1, "name": "Nakkhu at Bungmati", "basin": "Bagmati"},
+        [("t1", 0.45), ("t2", 0.44), ("t3", 0.43), ("t4", 0.10)], 60.0, 0.0)
+    assert not shallow.suspected, f"shallow gauge fired: {shallow.reason}"
+
+    return (f"Tangjiashan DBI {dbi['dbi']} unstable; celerity {s['wave_celerity_ms']} m/s; "
+            f"basin vocabulary and shallow-gauge guard hold")
 
 
 @check("earth rotation calculation sane")
