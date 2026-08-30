@@ -18,11 +18,19 @@ docker-compose.yml
 CICD-AWS.md
 MODEL-EVALUATION.md
 DEPLOY-EC2.md
+CMDS.md
+AWS-DEPLOYMENT-LOG.md
 
 .claude/
 CLAUDE.md
 
 # --- secrets ---
+# Private keys must never be committed, no matter where they are dropped.
+*.pem
+*.ppk
+*.key
+id_rsa*
+id_ed25519*
 .env
 *.key
 
