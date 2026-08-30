@@ -17,7 +17,7 @@ Dockerfile
 docker-compose.yml
 CICD-AWS.md
 MODEL-EVALUATION.md
-DEPLOY-EC2-CONSOLE.md
+DEPLOY-EC2.md
 
 .claude/
 CLAUDE.md
