@@ -5,7 +5,8 @@
 
 const BANDS = ['SEVERE', 'DANGER', 'WARNING', 'WATCH', 'NORMAL'];
 const BAND_VAR = { SEVERE: '--severe', DANGER: '--danger', WARNING: '--warning', WATCH: '--watch', NORMAL: '--normal' };
-const POLL_MS = 60_000;                       // UI refresh; the backend cycle is slower
+// SSE carries live updates; this poll is only the fallback when it is blocked.
+const POLL_MS = 300_000;
 const NEARBY_RADIUS_KM = 30;   // ground-truth radius for the Explore panel
 /* Below this zoom the map is a national severity overview and shows gauges
    only. Event pins would otherwise bury 309 gauge markers under 150 pins at
@@ -1061,6 +1062,18 @@ const OFFICIAL_SOURCES = [
       url: 'https://www.dhm.gov.np/' },
     { name: 'Nepal Police', detail: 'Official updates', url: 'https://www.nepalpolice.gov.np/' },
   ]},
+  { group: 'International', items: [
+    { name: 'WHO Nepal', detail: 'World Health Organization — country office',
+      url: 'https://www.who.int/nepal' },
+    { name: 'UN OCHA Nepal', detail: 'Humanitarian coordination and situation reports',
+      url: 'https://www.unocha.org/nepal' },
+    { name: 'IFRC / Nepal Red Cross', detail: 'Relief operations and appeals',
+      url: 'https://www.ifrc.org/emergencies' },
+    { name: 'UNICEF Nepal', detail: 'Child and family emergency response',
+      url: 'https://www.unicef.org/nepal/' },
+    { name: 'ReliefWeb — Nepal', detail: 'Aggregated situation reports and assessments',
+      url: 'https://reliefweb.int/country/npl' },
+  ]},
   { group: 'Representatives', items: [
     { name: 'Balen Shah', detail: 'Mayor, Kathmandu Metropolitan City',
       url: 'https://www.facebook.com/balenOfficial' },
@@ -1094,7 +1107,9 @@ async function renderUpdates() {
         <div class="s">${esc(n.source)}${n.districts ? ' · ' + esc(n.districts) : ''}</div>
       </a>`).join('') : '<p class="empty">No flood headlines right now.</p>'}
 
+    ${renderSafety()}
     ${links}
+    ${await renderRelief()}
     <p class="muted small src-note">
       Social pages open in a new tab. Their posts are not copied into this
       console: reading them programmatically needs Graph API access to Pages we
@@ -1178,6 +1193,136 @@ map.on('popupopen', (e) => {
   });
 });
 
+
+
+// ---------------------------------------------------------------------------
+// Flood safety guidance
+// ---------------------------------------------------------------------------
+/* Standard public-health flood guidance (WHO / IFRC / national disaster
+   authorities). Deliberately short: guidance nobody finishes reading protects
+   nobody. Split into do and do-not because the failure cases here are mostly
+   people doing the wrong thing confidently, not people doing nothing.
+
+   The "do not" list leads on driving and walking through water because those
+   are consistently the largest single causes of flood deaths worldwide. */
+const SAFETY_GUIDE = {
+  before: [
+    'Know your evacuation route and a high point you can reach on foot.',
+    'Keep documents, medicines and a torch in one bag you can carry.',
+    'Agree a meeting point with your family in case phones fail.',
+    'Charge phones and power banks when a warning is issued.',
+  ],
+  during_do: [
+    'Move to higher ground as soon as a warning is issued — do not wait to see water.',
+    'Switch off electricity and gas at the mains before leaving.',
+    'Take your emergency bag; leave everything else.',
+    'Call 1149 (NEOC) or 100 (Police) if you or others are trapped.',
+  ],
+  during_dont: [
+    'Do not walk through moving water. 15 cm can knock an adult over.',
+    'Do not drive through a flooded road. 60 cm floats most vehicles.',
+    'Do not cross a bridge with water rising against it.',
+    'Do not enter a river channel that has gone unusually dry — that can mean an upstream blockage is about to fail.',
+    'Do not touch electrical equipment while wet or standing in water.',
+  ],
+  after: [
+    'Assume flood water is contaminated — wash hands before eating.',
+    'Drink only boiled or treated water; waterborne disease follows floods.',
+    'Do not re-enter a damaged building until it has been checked.',
+    'Call 1115 (Health helpline) for medical advice.',
+  ],
+};
+
+function renderSafety() {
+  const list = (items, cls = '') =>
+    `<ul class="guide ${cls}">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  return `
+    <h4>If a flood is coming</h4>
+    <div class="guide-block">
+      <p class="guide-label">Before</p>${list(SAFETY_GUIDE.before)}
+      <p class="guide-label do">During — do</p>${list(SAFETY_GUIDE.during_do, 'do')}
+      <p class="guide-label dont">During — do not</p>${list(SAFETY_GUIDE.during_dont, 'dont')}
+      <p class="guide-label">Afterwards</p>${list(SAFETY_GUIDE.after)}
+    </div>
+    <p class="muted small src-note">
+      General guidance consistent with WHO, IFRC and national disaster authority
+      advice. It does not replace instructions from local officials — if they say
+      move, move.
+    </p>`;
+}
+
+// ---------------------------------------------------------------------------
+// Live updates over server-sent events
+// ---------------------------------------------------------------------------
+/* Replaces a 60s poll. This console is watched for hours, and polling meant a
+   new DANGER reading could sit unseen for most of a minute. SSE pushes once,
+   when a cycle has actually finished.
+
+   The poll is kept as a fallback on a long interval: if SSE is blocked by a
+   proxy the console must still update, just less promptly. */
+let sse = null;
+let sseRetry = 0;
+
+function connectLive() {
+  if (sse) sse.close();
+  try {
+    sse = new EventSource('/api/stream');
+  } catch {
+    return;                              // no EventSource; the fallback poll covers it
+  }
+
+  sse.addEventListener('cycle', () => {
+    setLiveState('live', 'updating…');
+    refresh().then(() => setLiveState('live'));
+  });
+
+  sse.addEventListener('hello', () => { sseRetry = 0; setLiveState('live'); });
+
+  sse.onerror = () => {
+    setLiveState('offline');
+    sse.close();
+    // Back off rather than hammering a server that may be restarting.
+    sseRetry = Math.min(sseRetry + 1, 6);
+    setTimeout(connectLive, 2000 * sseRetry);
+  };
+}
+
+function setLiveState(state, note = '') {
+  const el = $('#live-dot');
+  if (!el) return;
+  el.dataset.state = state;
+  el.title = state === 'live' ? (note || 'Live — updates pushed from the server')
+    : 'Reconnecting — falling back to periodic refresh';
+}
+
+// ---------------------------------------------------------------------------
+// Relief fund
+// ---------------------------------------------------------------------------
+/* Links only. The PMO has warned that unofficial QR codes and personal
+   accounts are circulating; rendering our own QR would look identical, to
+   whoever scans it, to the thing people are being told to distrust. */
+async function renderRelief() {
+  const d = await fetchJson('/api/relief');
+  return `
+    <h4>Donate — official channels</h4>
+    <div class="relief-warn">
+      <b>${esc(d.safety.headline)}</b>
+      <p>${esc(d.safety.rule)}</p>
+      <p class="muted small">${esc(d.safety.warning)}</p>
+      <ul>${d.safety.points.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+    </div>
+    <div class="src-list">
+      ${d.channels.map((c) => `
+        <a class="src" href="${safeUrl(c.url)}" target="_blank" rel="noopener noreferrer">
+          <span class="src-main">${esc(c.name)}
+            <span class="muted small">${esc(c.operator)}</span>
+            <span class="muted small">${esc(c.methods)}</span></span>
+          <span class="src-go" aria-hidden="true">&#8599;</span>
+        </a>`).join('')}
+    </div>
+    <p class="muted small src-note">${esc(d.policy)}</p>`;
+}
+
 /* Region selector. Nepal is the only enabled region today; the others are
    listed but disabled so the extension point is visible rather than implied. */
 async function loadRegions() {
@@ -1214,3 +1359,4 @@ try {
 // A station link cannot resolve until the station list exists.
 refresh().then(applyHash);
 setInterval(refresh, POLL_MS);
+connectLive();

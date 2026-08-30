@@ -13,10 +13,10 @@ from pathlib import Path
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, db, emergency, logs, pipeline, regions, tiles
+from . import analytics, db, emergency, logs, pipeline, regions, relief, tiles
 from .config import NEPAL_BBOX, ROOT, settings
 from .hazards import earth_rotation, outburst
 from .scoring import BANDS, haversine_km
@@ -377,6 +377,50 @@ def nearby(lat: float, lon: float, radius_km: float = 30.0, limit: int = 40):
     out["query"] = {"lat": lat, "lon": lon, "radius_km": radius_km}
     out["counts"] = {k: len(v) for k, v in out.items() if isinstance(v, list)}
     return out
+
+
+@app.get("/api/relief")
+def relief_channels():
+    """Official donation channels. Links only -- see relief.py for why."""
+    return relief.channels()
+
+
+@app.get("/api/stream")
+async def stream():
+    """Server-sent events: one message per completed collection cycle.
+
+    Replaces a 60-second poll. The console is watched for hours at a time, and
+    polling meant a new DANGER reading could sit unseen for most of a minute
+    while the browser re-fetched three endpoints it already had. This pushes
+    once, when something has actually changed.
+
+    A heartbeat every 20s keeps proxies from closing an idle connection, and
+    gives the client something to notice if the server goes away.
+    """
+    async def events():
+        last = pipeline.CYCLE_SEQ
+        # Tell a reconnecting client where we are before it waits.
+        yield f"event: hello\ndata: {json.dumps({'seq': last})}\n\n"
+        idle = 0
+        while True:
+            await asyncio.sleep(2)
+            if pipeline.CYCLE_SEQ != last:
+                last = pipeline.CYCLE_SEQ
+                idle = 0
+                payload = {"seq": last, "finished": pipeline.LAST_RUN.get("finished"),
+                           "stations": pipeline.LAST_RUN.get("stations")}
+                yield f"event: cycle\ndata: {json.dumps(payload)}\n\n"
+            else:
+                idle += 2
+                if idle >= 20:
+                    idle = 0
+                    yield ": keepalive\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",      # nginx would otherwise buffer the stream
+    })
 
 
 @app.get("/api/emergency")

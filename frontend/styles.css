@@ -85,6 +85,9 @@ header {
 .brand { display: flex; align-items: center; gap: var(--s2); color: var(--accent); }
 .brand h1 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
 .brand small { display: block; color: var(--muted); font-size: 11px; }
+/* The dot is a sibling of #updated, not inside it: renderKpis rewrites that
+   element's text on every cycle and would otherwise delete the indicator. */
+.status-line { display: flex; align-items: center; }
 
 .region-select select {
   background: var(--surface-2); color: var(--fg);
@@ -523,3 +526,40 @@ ol.actions li span { display: block; text-decoration: none; }
   margin-left: auto; background: none; border: 0; color: var(--muted);
   font-size: 10px; font-variant-numeric: tabular-nums; text-decoration: underline dotted;
 }
+
+
+/* ---------- live indicator ---------- */
+.live-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle; background: var(--muted);
+}
+.live-dot[data-state="live"] { background: var(--normal); animation: livepulse 2.6s ease-in-out infinite; }
+.live-dot[data-state="offline"] { background: var(--warning); }
+@keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ---------- relief ---------- */
+.relief-warn {
+  margin: 0 var(--s2) var(--s3); padding: var(--s3);
+  background: var(--surface-2); border-left: 3px solid var(--danger);
+  border-radius: 4px; font-size: 11px; line-height: 1.5;
+}
+.relief-warn b { display: block; font-size: 12px; margin-bottom: 4px; }
+.relief-warn p { margin: 0 0 var(--s2); }
+.relief-warn ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+
+
+/* ---------- safety guidance ---------- */
+.guide-block { margin: 0 var(--s2) var(--s3); }
+.guide-label {
+  margin: var(--s3) 0 var(--s1); font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.guide-label::before {
+  content: ''; width: 3px; height: 12px; border-radius: 2px; background: var(--muted);
+}
+.guide-label.do::before { background: var(--normal); }
+.guide-label.dont::before { background: var(--danger); }
+.guide { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 11px; line-height: 1.45; }
+.guide li::marker { color: var(--muted); }
+.guide.dont li::marker { color: var(--danger); }
+.guide.do li::marker { color: var(--normal); }

@@ -34,6 +34,11 @@ HISTORY_WINDOW = 24
 
 LAST_RUN: dict = {"started": None, "finished": None, "sources": {}, "stations": 0}
 
+# Bumped once per completed cycle. The SSE endpoint watches this rather than
+# polling the database: it is the one authoritative "something changed" signal,
+# and an integer comparison is cheaper than a query.
+CYCLE_SEQ = 0
+
 # The resource register barely changes (BIPAD's own records date from 2022), so
 # it is refreshed daily. Re-pulling 16k rows every 12 minutes would be waste.
 RESOURCE_REFRESH_HOURS = 24
@@ -309,5 +314,8 @@ async def run_cycle() -> dict:
         c.execute("INSERT OR REPLACE INTO cycles (started,finished,ok,notes) VALUES (?,?,?,?)",
                   (LAST_RUN["started"], LAST_RUN["finished"], int(bool(stations)),
                    json.dumps(LAST_RUN["sources"])))
+    global CYCLE_SEQ
+    CYCLE_SEQ += 1
+    LAST_RUN["seq"] = CYCLE_SEQ
     log.info("cycle done: %d stations scored, %d hazard events", len(scores), len(hazards))
     return LAST_RUN
