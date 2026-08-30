@@ -80,13 +80,17 @@ def run_in_backend(args: list[str]) -> int:
 
 
 def port_is_free(host: str, port: int) -> bool:
+    """True when nothing is already listening on the port.
+
+    Probes by connecting rather than binding. Binding to test would open a
+    listener on every interface for the 0.0.0.0 case, which is a lot of
+    exposure for a question, and briefly races with the server we are about
+    to start on the same port.
+    """
+    probe = host if host not in ("0.0.0.0", "") else "127.0.0.1"
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind((host if host != "0.0.0.0" else "", port))
-            return True
-        except OSError:
-            return False
+        sock.settimeout(0.4)
+        return sock.connect_ex((probe, port)) != 0
 
 
 def pick_port(host: str, preferred: int, tries: int = 20) -> int:

@@ -26,6 +26,18 @@ log = logging.getLogger("tiles")
 # GIBS dates reach a cache path and a log line, so the shape is enforced.
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
+
+def _loggable(value, limit: int = 200) -> str:
+    """Flatten a value for logging.
+
+    Exception text embeds the request URL, and a Content-Type comes straight
+    from the remote server. Either can carry newlines, and a newline in a log
+    line lets a hostile upstream forge entries that look like ours. Strip the
+    control characters and cap the length.
+    """
+    text = str(value)
+    return "".join(ch if ch.isprintable() else " " for ch in text)[:limit]
+
 # Basemap provider, chosen after two false starts worth recording:
 #
 #   CARTO Positron/Dark Matter  now burns an "API KEY REQUIRED" watermark into
@@ -179,14 +191,14 @@ async def fetch_tile(client: httpx.AsyncClient, style: str, z: int, x: int, y: i
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("tile miss %s/%s/%s/%s: %s", style, z, x, y, exc)
+        log.debug("tile miss %s/%s/%s/%s: %s", style, z, x, y, _loggable(exc))
         return path.read_bytes() if path.exists() else None    # stale beats blank
 
     # A provider that answers 200 with an HTML error page (or a "blocked"
     # notice) would otherwise be cached and served forever as a valid tile.
     if not r.headers.get("content-type", "").startswith("image/"):
         log.warning("tile provider returned non-image for %s/%s/%s/%s: %s",
-                    style, z, x, y, r.headers.get("content-type"))
+                    style, z, x, y, _loggable(r.headers.get("content-type")))
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,7 +270,7 @@ async def fetch_satellite(client: httpx.AsyncClient, z: int, x: int, y: int) -> 
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("esri tile miss %s/%s/%s: %s", z, x, y, exc)
+        log.debug("esri tile miss %s/%s/%s: %s", z, x, y, _loggable(exc))
         return path.read_bytes() if path.exists() else None
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,7 +304,7 @@ async def fetch_gibs(client: httpx.AsyncClient, layer: str, date: str,
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("gibs miss %s %s %s/%s/%s: %s", layer, date, z, x, y, exc)
+        log.debug("gibs miss %s %s %s/%s/%s: %s", layer, date, z, x, y, _loggable(exc))
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)
