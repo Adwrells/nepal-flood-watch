@@ -27,6 +27,17 @@ log = logging.getLogger("tiles")
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
+def _style_label(style: str) -> str:
+    """Our own constant for a validated style, not the caller's string.
+
+    The membership guard above already rejects anything unknown, but the guard
+    narrows the VALUE while the variable still holds the caller's object. Taint
+    analysis is right to keep flagging it, and looking the label up in our own
+    table means the log line is built from our literals either way.
+    """
+    return _STYLE_LABELS.get(style, "unknown")
+
+
 def _fault(exc: Exception) -> str:
     """Describe a failed request without echoing anything the remote controls.
 
@@ -84,6 +95,9 @@ STYLES = {
     "street": _ESRI.replace("{service}", "World_Street_Map"),
     "topo": _ESRI.replace("{service}", "World_Topo_Map"),
 }
+
+# Literal labels for logging, so a log line is never built from a caller string.
+_STYLE_LABELS = {"dark": "dark", "light": "light", "street": "street", "topo": "topo"}
 
 ATTRIBUTION = ('Basemap &copy; <a href="https://www.esri.com">Esri</a>, '
                'HERE, Garmin, &copy; OpenStreetMap contributors')
@@ -208,14 +222,15 @@ async def fetch_tile(client: httpx.AsyncClient, style: str, z: int, x: int, y: i
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("tile miss %s/%s/%s/%s: %s", style, z, x, y, _fault(exc))
+        log.debug("tile miss %s/%s/%s/%s: %s", _style_label(style), z, x, y, _fault(exc))
         return path.read_bytes() if path.exists() else None    # stale beats blank
 
     # A provider that answers 200 with an HTML error page (or a "blocked"
     # notice) would otherwise be cached and served forever as a valid tile.
     if not r.headers.get("content-type", "").startswith("image/"):
         log.warning("tile provider returned %s, not an image, for %s/%s/%s/%s",
-                    _content_kind(r.headers.get("content-type")), style, z, x, y)
+                    _content_kind(r.headers.get("content-type")),
+                    _style_label(style), z, x, y)
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -321,7 +336,10 @@ async def fetch_gibs(client: httpx.AsyncClient, layer: str, date: str,
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("gibs miss %s %s %s/%s/%s: %s", layer, date, z, x, y, _fault(exc))
+        # GIBS_LAYERS is ours, so its label is a literal; the date is already
+        # shape-checked and is not echoed. Neither caller string reaches the log.
+        log.debug("gibs miss %s %s/%s/%s: %s",
+                  GIBS_LAYERS[layer]["label"], z, x, y, _fault(exc))
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)

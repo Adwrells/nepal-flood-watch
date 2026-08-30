@@ -153,3 +153,50 @@ class TestPrescription:
         assert trend_class(0.0) == "steady"
         assert trend_class(-0.5) == "falling fast"
         assert trend_class(None) == "unknown"
+
+
+class TestHydrologicalContext:
+    """Signals that encode how a forecaster reasons, not more curve fitting."""
+
+    def test_acceleration_detects_a_speeding_rise(self):
+        from app.analytics import acceleration_mph2
+        steady = acceleration_mph2([1.0, 1.1, 1.2])       # constant rate
+        speeding = acceleration_mph2([1.0, 1.1, 1.4])     # rate increasing
+        assert steady == pytest.approx(0.0, abs=1e-9)
+        assert speeding > 0
+
+    def test_acceleration_needs_three_points(self):
+        from app.analytics import acceleration_mph2
+        assert acceleration_mph2([1.0, 1.2]) is None
+
+    def test_one_rising_gauge_is_never_basin_wide(self):
+        """1 of 2 is 50% and still a single instrument -- nothing to corroborate."""
+        from app.analytics import basin_coherence
+        r = basin_coherence([
+            {"basin": "Mechi", "level": 1.0, "rise_rate": 0.5, "name": "A"},
+            {"basin": "Mechi", "level": 1.0, "rise_rate": 0.0, "name": "B"},
+        ])
+        assert r["Mechi"]["verdict"].startswith("isolated")
+
+    def test_several_agreeing_gauges_read_as_coherent(self):
+        from app.analytics import basin_coherence
+        r = basin_coherence([
+            {"basin": "Koshi", "level": 1.0, "rise_rate": 0.4, "name": "A"},
+            {"basin": "Koshi", "level": 1.0, "rise_rate": 0.3, "name": "B"},
+            {"basin": "Koshi", "level": 1.0, "rise_rate": 0.0, "name": "C"},
+        ])
+        assert r["Koshi"]["verdict"].startswith("coherent")
+
+    def test_silent_gauge_during_rain_is_flagged(self):
+        """Telemetry dies when power and networks die, which is when floods happen."""
+        from app.analytics import silence_is_suspicious
+        assert silence_is_suspicious("2020-01-01T00:00:00+05:45", 60)
+        assert not silence_is_suspicious("2020-01-01T00:00:00+05:45", 0)
+
+    def test_forecast_never_loses_to_persistence(self):
+        """Regression guard: the shipped model was once 72% WORSE than doing nothing."""
+        from app.analytics import forecast_skill
+        rising = {i: [1.0 + 0.1 * j + (j % 2) * 0.01 for j in range(10)] for i in range(30)}
+        r = forecast_skill(rising)
+        assert r["n"] > 0
+        assert r["skill"] >= -0.05, f"forecast is worse than persistence: {r}"

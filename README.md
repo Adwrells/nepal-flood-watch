@@ -237,7 +237,9 @@ entirely outside Nepal's observation network. A suspected impoundment floors the
 band at WARNING — otherwise the plain score would report a falling river as calm
 at exactly the wrong moment.
 
-Full derivations are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Full derivations are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the
+forecast's measured accuracy and error sources in
+[docs/ANALYTICS.md](docs/ANALYTICS.md).
 
 ---
 
@@ -430,6 +432,9 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/facilities/nearest` | Closest health facilities to a point |
 | `GET /api/nearby` | Incidents, gauges, quakes and headlines around a point |
 | `GET /api/relief` | Official donation channels and the PMO safety rule |
+| `GET /api/basins` | Per-basin coherence — is a rise corroborated by neighbours? |
+| `GET /api/forecast/skill` | Live backtest of the forecast against persistence |
+| `GET /api/errors` | Recent faults; `?summary=true` groups them |
 | `GET /api/stream` | Server-sent events, one per completed cycle |
 | `GET /api/health` | Per-source status and data-quality report |
 | `POST /api/refresh` | Force a cycle now |

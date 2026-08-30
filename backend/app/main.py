@@ -137,6 +137,39 @@ def station_detail(station_id: int):
     }
 
 
+@app.get("/api/basins")
+def basins():
+    """Per-basin coherence: is a rise corroborated by neighbouring gauges?
+
+    One gauge rising can be a stuck sensor. Several rising together cannot be.
+    This is the cheapest defence against acting on instrument error, and the
+    cheapest corroboration when the reading is real.
+    """
+    return analytics.basin_coherence(_latest_scores())
+
+
+@app.get("/api/forecast/skill")
+def forecast_skill():
+    """Backtest of the forecast against persistence, on live stored history.
+
+    Published rather than hidden: a model that cannot beat "it will be what it
+    is now" adds confident noise to a decision someone may act on, and whoever
+    relies on this console is entitled to see that number.
+    """
+    with db.conn() as c:
+        series = {}
+        for (sid,) in c.execute("SELECT DISTINCT station_id FROM readings"):
+            series[sid] = [r["level"] for r in c.execute(
+                "SELECT level FROM readings WHERE station_id=? ORDER BY ts", (sid,))]
+    result = analytics.forecast_skill(series)
+    result["interpretation"] = (
+        "skill > 0 means better than assuming no change; 0 means equal to it. "
+        "Parity is the expected result in quiet weather, when there is no trend "
+        "to find. The trend term contributes when a river is genuinely rising."
+    )
+    return result
+
+
 @app.get("/api/hazards")
 def hazards(kind: str | None = None, limit: int = 500):
     """Fire and earthquake events, for the non-flood map layers."""
