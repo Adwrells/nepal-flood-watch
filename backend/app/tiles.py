@@ -27,16 +27,33 @@ log = logging.getLogger("tiles")
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-def _loggable(value, limit: int = 200) -> str:
-    """Flatten a value for logging.
+def _fault(exc: Exception) -> str:
+    """Describe a failed request without echoing anything the remote controls.
 
-    Exception text embeds the request URL, and a Content-Type comes straight
-    from the remote server. Either can carry newlines, and a newline in a log
-    line lets a hostile upstream forge entries that look like ours. Strip the
-    control characters and cap the length.
+    Exception text embeds the request URL and often the server's response, so
+    logging it lets a hostile upstream inject newlines and forge entries that
+    look like ours. The exception CLASS plus the status code carries everything
+    the log is actually for -- "was it a timeout, a 404, or a 500" -- and is
+    derived from our own code rather than from their bytes.
+
+    Sanitising the string instead would work, but a hand-rolled sanitiser is
+    something every future reader (and every static analyser) has to take on
+    trust. Not passing the value at all needs no trust.
     """
-    text = str(value)
-    return "".join(ch if ch.isprintable() else " " for ch in text)[:limit]
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return f"{type(exc).__name__}" + (f" HTTP {int(status)}" if status else "")
+
+
+def _content_kind(content_type) -> str:
+    """Coarse, closed-vocabulary description of a response's declared type."""
+    ct = (content_type or "").split(";")[0].strip().lower()
+    if ct.startswith("image/"):
+        return "image"
+    if ct.startswith("text/html"):
+        return "html"          # the shape of a "blocked" or error page
+    if ct.startswith("application/json"):
+        return "json"
+    return "other" if ct else "absent"
 
 # Basemap provider, chosen after two false starts worth recording:
 #
@@ -191,14 +208,14 @@ async def fetch_tile(client: httpx.AsyncClient, style: str, z: int, x: int, y: i
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("tile miss %s/%s/%s/%s: %s", style, z, x, y, _loggable(exc))
+        log.debug("tile miss %s/%s/%s/%s: %s", style, z, x, y, _fault(exc))
         return path.read_bytes() if path.exists() else None    # stale beats blank
 
     # A provider that answers 200 with an HTML error page (or a "blocked"
     # notice) would otherwise be cached and served forever as a valid tile.
     if not r.headers.get("content-type", "").startswith("image/"):
-        log.warning("tile provider returned non-image for %s/%s/%s/%s: %s",
-                    style, z, x, y, _loggable(r.headers.get("content-type")))
+        log.warning("tile provider returned %s, not an image, for %s/%s/%s/%s",
+                    _content_kind(r.headers.get("content-type")), style, z, x, y)
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,7 +287,7 @@ async def fetch_satellite(client: httpx.AsyncClient, z: int, x: int, y: int) -> 
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("esri tile miss %s/%s/%s: %s", z, x, y, _loggable(exc))
+        log.debug("esri tile miss %s/%s/%s: %s", z, x, y, _fault(exc))
         return path.read_bytes() if path.exists() else None
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -304,7 +321,7 @@ async def fetch_gibs(client: httpx.AsyncClient, layer: str, date: str,
         r = await client.get(url, headers={"User-Agent": settings.user_agent})
         r.raise_for_status()
     except httpx.HTTPError as exc:
-        log.debug("gibs miss %s %s %s/%s/%s: %s", layer, date, z, x, y, _loggable(exc))
+        log.debug("gibs miss %s %s %s/%s/%s: %s", layer, date, z, x, y, _fault(exc))
         return None
 
     path.parent.mkdir(parents=True, exist_ok=True)

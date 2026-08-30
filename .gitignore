@@ -30,6 +30,8 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+htmlcov/
 .ruff_cache/
 
 # --- editors / OS ---

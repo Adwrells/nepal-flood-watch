@@ -33,7 +33,15 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-cov
+
+      # Unit tests first: they are hermetic and fast, so a broken model fails
+      # in seconds rather than after the preflight has set up a database.
+      - name: Tests
+        working-directory: backend
+        run: python -m pytest --cov=app --cov-report=term-missing:skip-covered
 
       # --offline on purpose. The live checks talk to DHM, BIPAD, USGS and five
       # news feeds; if one of them is down that is their outage, not a broken
