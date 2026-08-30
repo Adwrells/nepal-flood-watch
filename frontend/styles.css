@@ -342,17 +342,42 @@ ol.actions li span { display: block; text-decoration: none; }
 
   .map-wrap { height: 72vh; min-height: 420px; }
 
-  /* Overlays covered most of a narrow map, so they collapse to a compact
-     corner control instead of a permanent panel. */
+  /* The layer controls were covering the map they control -- roughly 350 of
+     375 pixels wide. On phones they collapse to a chip; the legend stays
+     visible as the tap target and the options appear only when asked for. */
   .layers {
-    max-width: 46vw;
-    padding: var(--s1) var(--s2);
-    font-size: 11px;
-    opacity: .93;
+    max-width: none;
+    width: auto;
+    padding: 0;
+    opacity: .96;
   }
-  .layers label { padding: 1px 0; font-size: 11px; }
-  .layers legend { font-size: 9px; }
+  .layers legend {
+    display: block;
+    float: none;
+    padding: var(--s2) var(--s3);
+    font-size: 10px;
+    color: var(--fg);
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .layers legend::after { content: ' ▾'; color: var(--muted); }
+  .layers.open legend::after { content: ' ▴'; }
+
+  /* Collapsed by default: the options are hidden until the chip is tapped. */
+  .layers label { display: none; }
+  .layers.open label {
+    display: flex;
+    padding: 3px var(--s3);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .layers.open { padding-bottom: var(--s2); }
+
   .layers.basemaps { bottom: var(--s2); }
+
+  /* The zoom-gate hint wrapped onto two lines inside a cramped row. */
+  .gate-hint { margin-left: var(--s2); }
 
   .detail {
     position: fixed;

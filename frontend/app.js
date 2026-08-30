@@ -1508,6 +1508,38 @@ async function renderRelief() {
 }
 
 
+
+/* Phone-only: the map overlays start collapsed and open on a tap. The CSS that
+   hides their options lives inside the 820px media query, so on desktop the
+   `open` class changes nothing and the panels stay as they were. */
+(function collapsibleOverlays() {
+  document.querySelectorAll('.layers legend').forEach((legend) => {
+    const box = legend.closest('.layers');
+    legend.setAttribute('role', 'button');
+    legend.setAttribute('tabindex', '0');
+    legend.setAttribute('aria-expanded', 'false');
+
+    const toggle = (e) => {
+      e.stopPropagation();          // never let the tap reach the map beneath
+      const open = box.classList.toggle('open');
+      legend.setAttribute('aria-expanded', String(open));
+    };
+
+    legend.addEventListener('click', toggle);
+    legend.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); }
+    });
+  });
+
+  // Tapping the map closes them again, so they never linger over the data.
+  map.on('click', () => {
+    document.querySelectorAll('.layers.open').forEach((b) => {
+      b.classList.remove('open');
+      b.querySelector('legend')?.setAttribute('aria-expanded', 'false');
+    });
+  });
+})();
+
 /* On a phone the gauge list is collapsed so the map is above the fold. Tapping
    its heading expands it. Desktop is unaffected -- the CSS that shortens the
    list only applies under 820px, so the class is inert there. */
