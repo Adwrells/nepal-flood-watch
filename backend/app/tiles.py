@@ -13,6 +13,7 @@ a world mirror.
 import asyncio
 import logging
 import math
+import re
 import time
 from pathlib import Path
 
@@ -21,6 +22,9 @@ import httpx
 from .config import NEPAL_BBOX, settings
 
 log = logging.getLogger("tiles")
+
+# GIBS dates reach a cache path and a log line, so the shape is enforced.
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # Basemap provider, chosen after two false starts worth recording:
 #
@@ -155,7 +159,15 @@ def is_fresh(path: Path) -> bool:
 
 
 async def fetch_tile(client: httpx.AsyncClient, style: str, z: int, x: int, y: int) -> bytes | None:
-    """Return a tile from disk, fetching and caching it on a miss."""
+    """Return a tile from disk, fetching and caching it on a miss.
+
+    `style` is validated here, not only in the route. It reaches a filesystem
+    path and a log line, and this module should be safe to call from anywhere
+    rather than safe only because its current caller happens to check first.
+    """
+    if style not in STYLES:
+        return None
+    z, x, y = int(z), int(x), int(y)
     path = cache_path(style, z, x, y)
     if is_fresh(path):
         return path.read_bytes()
@@ -234,6 +246,7 @@ def satellite_path(source: str, z: int, x: int, y: int, date: str = "static") ->
 
 async def fetch_satellite(client: httpx.AsyncClient, z: int, x: int, y: int) -> bytes | None:
     """Esri World Imagery tile, cached. Note the z/y/x order in their REST path."""
+    z, x, y = int(z), int(x), int(y)
     if not in_nepal_tile(x, y, z):
         return None
     path = satellite_path("esri", z, x, y)
@@ -261,7 +274,11 @@ async def fetch_gibs(client: httpx.AsyncClient, layer: str, date: str,
     cached copy stays valid forever. That makes before/after comparison free
     after the first look.
     """
+    z, x, y = int(z), int(x), int(y)
     if layer not in GIBS_LAYERS or z > GIBS_MAX_ZOOM:
+        return None
+    # Dates land in a cache path and a log line; accept only the exact shape.
+    if not _DATE_RE.fullmatch(date):
         return None
     if not in_nepal_tile(x, y, z):
         return None

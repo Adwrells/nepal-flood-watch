@@ -114,9 +114,16 @@ python launch.py
 The console comes up at **http://127.0.0.1:8000**. The first cycle runs
 immediately, so the map is populated within about thirty seconds.
 
+One command does everything: creates the virtual environment, installs
+dependencies, picks a free port if 8000 is taken, starts the server, and opens
+your browser once it actually answers. The backend serves the frontend itself,
+so there is no second process and no build step.
+
 | Command | Does |
 |---------|------|
-| `python launch.py` | Serve the console (same as `serve`) |
+| `python launch.py` | Set up, serve, and open a browser |
+| `python launch.py serve --no-browser` | Serve without opening a tab |
+| `python launch.py serve --strict-port` | Fail on a busy port instead of moving up |
 | `python launch.py serve --host 0.0.0.0 --port 9000` | Serve on a chosen address |
 | `python launch.py check` | Deployment preflight, 20 checks |
 | `python launch.py check --offline` | Preflight without live source calls |

@@ -942,10 +942,20 @@ document.querySelectorAll('input[name="basemap"]').forEach((r) =>
    Reading happens once at boot; writing is debounced so panning the map does not
    flood the history stack.
 --------------------------------------------------------------------------- */
+/* Every key this app understands. An allowlist rather than sanitising, because
+   the set is small and known: assigning arbitrary URL-supplied keys onto an
+   object literal lets `#__proto__=x` reach Object.prototype, and a null-
+   prototype object alone would still accept junk keys we never read. */
+const HASH_KEYS = new Set([
+  'station', 'tab', 'theme', 'basemap', 'imagery', 'ack', 'nolive',
+]);
+
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
-  const out = {};
-  for (const [k, v] of h) out[k] = v;
+  const out = Object.create(null);
+  for (const [k, v] of h) {
+    if (HASH_KEYS.has(k)) out[k] = v;
+  }
   return out;
 }
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Cross-platform launcher. Same commands on Linux, macOS and Windows.
 
-    python launch.py                 serve on http://127.0.0.1:8000
+    python launch.py                 set up, serve, and open a browser
     python launch.py serve --port 9000 --host 0.0.0.0
+    python launch.py serve --no-browser
     python launch.py check           deployment preflight (20 checks)
     python launch.py check --offline skip live source checks
     python launch.py cycle           run one collection cycle and exit
@@ -15,9 +16,13 @@ script works from a bare Python with no dependencies installed.
 """
 import argparse
 import os
+import socket
 import subprocess
 import sys
+import threading
+import time
 import venv
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -74,13 +79,76 @@ def run_in_backend(args: list[str]) -> int:
     return subprocess.call([sys.executable, *args], cwd=BACKEND)
 
 
+def port_is_free(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host if host != "0.0.0.0" else "", port))
+            return True
+        except OSError:
+            return False
+
+
+def pick_port(host: str, preferred: int, tries: int = 20) -> int:
+    """Return the preferred port, or the next free one above it.
+
+    Failing with "address already in use" is a poor greeting for someone whose
+    only crime is having left an old copy running, so we move up instead. The
+    chosen port is printed, because a silently different port is worse than an
+    error.
+    """
+    for offset in range(tries):
+        candidate = preferred + offset
+        if port_is_free(host, candidate):
+            if offset:
+                print(f"Port {preferred} is in use; using {candidate} instead.", flush=True)
+            return candidate
+    raise SystemExit(f"No free port between {preferred} and {preferred + tries - 1}.")
+
+
+def open_when_ready(url: str, host: str, port: int, timeout: float = 90.0) -> None:
+    """Open a browser once the server actually answers.
+
+    Opening immediately shows a connection error, because the first cycle and
+    the scheduler start before uvicorn binds. Polling the port and waiting for
+    the API to respond means the tab opens on a working console.
+    """
+    def wait():
+        deadline = time.time() + timeout
+        probe = host if host not in ("0.0.0.0", "") else "127.0.0.1"
+        while time.time() < deadline:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1.0)
+                if sock.connect_ex((probe, port)) == 0:
+                    time.sleep(1.0)          # let the app finish starting up
+                    webbrowser.open(url)
+                    return
+            time.sleep(0.5)
+
+    threading.Thread(target=wait, daemon=True).start()
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 def cmd_serve(args) -> int:
-    print(f"Nepal Flood Watch -> http://{args.host}:{args.port}")
-    print("First cycle starts immediately; the map fills within ~30s.  Ctrl-C to stop.")
-    cmd = ["-m", "uvicorn", "app.main:app", "--host", args.host, "--port", str(args.port)]
+    port = args.port if args.strict_port else pick_port(args.host, args.port)
+    shown = args.host if args.host not in ("0.0.0.0", "") else "127.0.0.1"
+    url = f"http://{shown}:{port}"
+
+    # flush=True matters: uvicorn logs to stderr, which is unbuffered, so a
+    # buffered stdout banner arrives after the server output when piped -- and
+    # the URL is the one line the user actually needs to see first.
+    print(f"Nepal Flood Watch -> {url}", flush=True)
+    print("First cycle starts immediately; the map fills within ~30s.  Ctrl-C to stop.",
+          flush=True)
+
+    # The backend serves the frontend itself (StaticFiles mounted at /), so
+    # there is no second process to start and nothing to build.
+    if not args.no_browser:
+        open_when_ready(url, args.host, port)
+
+    cmd = ["-m", "uvicorn", "app.main:app", "--host", args.host, "--port", str(port)]
     if args.reload:
         cmd.append("--reload")
     return run_in_backend(cmd)
@@ -132,6 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--reload", action="store_true", help="auto-reload on code changes")
+    s.add_argument("--no-browser", action="store_true", help="do not open a browser")
+    s.add_argument("--strict-port", action="store_true",
+                   help="fail if the port is taken instead of moving to the next free one")
     s.set_defaults(func=cmd_serve)
 
     c = sub.add_parser("check", help="run the deployment preflight")

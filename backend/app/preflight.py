@@ -208,7 +208,15 @@ def c_tiles():
     assert not tiles.in_nepal_tile(*tiles.deg2num(48.8, 2.3, 8), 8), "Paris tile accepted"
     # Just outside the border must still resolve, or the map renders as an island.
     assert tiles.in_nepal_tile(*tiles.deg2num(27.0, 89.0, 8), 8), "context buffer not applied"
-    return f"Kathmandu in, Paris out, {tiles.CONTEXT_BUFFER_DEG} deg context buffer"
+    # Untrusted style/layer/date values must be rejected by the module itself,
+    # not only by the route that currently guards them.
+    import asyncio as _a
+    assert _a.run(tiles.fetch_tile(None, "../../etc", 8, 188, 107)) is None, \
+        "unknown tile style was not rejected"
+    assert _a.run(tiles.fetch_gibs(None, "flood", "not-a-date", 8, 188, 107)) is None, \
+        "malformed GIBS date was not rejected"
+    return (f"Kathmandu in, Paris out, {tiles.CONTEXT_BUFFER_DEG} deg buffer; "
+            f"bad style and date rejected")
 
 
 # ---------------------------------------------------------------------------
