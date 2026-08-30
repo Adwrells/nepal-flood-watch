@@ -435,6 +435,8 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/nearby` | Incidents, gauges, quakes and headlines around a point |
 | `GET /api/relief` | Official donation channels and the PMO safety rule |
 | `GET /api/basins` | Per-basin coherence — is a rise corroborated by neighbours? |
+| `GET /api/models/bakeoff` | Train and score every forecaster on the same live data |
+| `GET /api/analytics/pipeline` | Cleaning → descriptive → diagnostic → predictive → prescriptive |
 | `GET /api/forecast/skill` | Live backtest of the forecast against persistence |
 | `GET /api/errors` | Recent faults; `?summary=true` groups them |
 | `GET /api/stream` | Server-sent events, one per completed cycle |
@@ -489,9 +491,17 @@ empty", score as safe, and is the most dangerous possible failure mode here.
 index and the band name, the severity ramp is monotonic in lightness as well as
 hue, and event pins differ from gauges in shape.
 
-**No machine learning.** With ~300 gauges reporting irregularly and no labelled
-flood outcomes, a learned model would be unvalidatable. Every number traces to a
-published relation or a stated weight.
+**Machine learning is wired in but gated.** Gradient boosting, random forest and
+ridge are implemented behind a common interface, with scikit-learn as an
+*optional* dependency (`backend/requirements-ml.txt`) so the base image stays at
+244 MB. Every model is scored by the same hold-out backtest, and the rule is
+absolute: **a model may only be enabled if it beats persistence.**
+
+At the time of writing it does not. Ridge trained on 2,547 examples and scored
+**−8.8%**; gradient boosting and random forest correctly refuse to train below
+10,000 examples. That number is published live at `/api/models/bakeoff` and in
+the Model tab, and it will change as history accumulates — which is the point of
+building the harness rather than the model.
 
 ---
 

@@ -1,0 +1,10 @@
+# Optional: the learned forecasters (gradient boosting, random forest, ridge).
+#
+# The console runs fully without these. Without scikit-learn the learned models
+# report themselves unavailable and the damped-Holt baseline stays active --
+# which is the right default until a learned model is measured to beat
+# persistence on your own data. See docs/ANALYTICS.md.
+#
+#   pip install -r backend/requirements-ml.txt
+scikit-learn>=1.5
+numpy>=1.26

@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, db, emergency, logs, pipeline, regions, relief, tiles
+from . import analytics, db, emergency, logs, models, pipeline, regions, relief, tiles
 from .config import NEPAL_BBOX, ROOT, settings
 from .hazards import earth_rotation, outburst
 from .scoring import BANDS, haversine_km
@@ -168,6 +168,103 @@ def forecast_skill():
         "to find. The trend term contributes when a river is genuinely rising."
     )
     return result
+
+
+def _training_data():
+    """Level series, rainfall context and danger marks, keyed by station."""
+    series, rain, danger = {}, {}, {}
+    with db.conn() as c:
+        for (sid,) in c.execute("SELECT DISTINCT station_id FROM readings"):
+            series[sid] = [r["level"] for r in c.execute(
+                "SELECT level FROM readings WHERE station_id=? ORDER BY ts", (sid,))]
+        for r in c.execute("SELECT station_id, past_24h, next_12h FROM rainfall"):
+            rain[r["station_id"]] = {"rain_past_24h": r["past_24h"],
+                                     "rain_next_12h": r["next_12h"]}
+        for r in c.execute("SELECT id, danger_level FROM stations WHERE danger_level IS NOT NULL"):
+            danger[r["id"]] = r["danger_level"]
+    return series, rain, danger
+
+
+@app.get("/api/models/bakeoff")
+def models_bakeoff():
+    """Train and score every forecaster on the same live data.
+
+    Published rather than hidden. A model is only worth enabling if it beats
+    persistence, and whoever relies on this console is entitled to see whether
+    the one that is running does.
+    """
+    series, rain, danger = _training_data()
+    result = models.evaluate_all(series, rain, danger)
+    result["training_examples"] = sum(
+        max(0, len([v for v in s if v is not None]) - models.MIN_HISTORY)
+        for s in series.values())
+    result["features"] = models.FEATURE_NAMES
+    result["sklearn_available"] = models.SKLEARN
+    return result
+
+
+@app.get("/api/analytics/pipeline")
+def analytics_pipeline():
+    """The whole analytics ladder in one payload, for the Model tab.
+
+    Cleaning -> descriptive -> diagnostic -> predictive -> prescriptive, each
+    stage reporting what it actually did this cycle rather than describing
+    itself in the abstract.
+    """
+    rows = _latest_scores()
+    quality = (pipeline.LAST_RUN.get("quality") or {})
+    bands = {}
+    for r in rows:
+        bands[r["band"]] = bands.get(r["band"], 0) + 1
+
+    with db.conn() as c:
+        readings = c.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
+
+    reporting = [r for r in rows if r["level"] is not None]
+    rising = [r for r in rows if (r["rise_rate"] or 0) > 0.02]
+    with_forecast = [r for r in rows if r["hours_to_danger"] is not None]
+
+    # Mean component contribution, so the diagnostic stage shows what is
+    # actually driving scores right now rather than the configured weights.
+    comp_totals, n = {}, 0
+    for r in rows:
+        for k, v in (r["components"] or {}).items():
+            comp_totals[k] = comp_totals.get(k, 0) + v
+        n += 1
+    drivers = {k: round(v / n, 1) for k, v in comp_totals.items()} if n else {}
+
+    return {
+        "cleaning": {
+            "stations_in": quality.get("stations_in"),
+            "stations_kept": quality.get("stations_kept"),
+            "reporting_level": quality.get("stations_reporting_level"),
+            "with_danger_mark": quality.get("stations_with_danger_mark"),
+            "incidents_kept": quality.get("incidents_kept"),
+            "note": "Unparseable values become null, never zero.",
+        },
+        "descriptive": {
+            "gauges": len(rows), "reporting": len(reporting),
+            "bands": bands, "rising": len(rising),
+            "stored_readings": readings,
+        },
+        "diagnostic": {
+            "mean_component_contribution": drivers,
+            "basins": analytics.basin_coherence(rows),
+            "note": "Component means show what is driving scores now, not the configured weights.",
+        },
+        "predictive": {
+            "active_model": models.DEFAULT,
+            "baseline": models.BASELINE,
+            "gauges_with_time_to_danger": len(with_forecast),
+            "soonest_hours": min((r["hours_to_danger"] for r in with_forecast), default=None),
+            "highest_p6h": max((r["p_exceed_6h"] or 0 for r in rows), default=0),
+        },
+        "prescriptive": {
+            "immediate": sum(1 for r in rows if r["band"] in ("SEVERE", "DANGER")),
+            "elevated": sum(1 for r in rows if r["band"] == "WARNING"),
+            "impoundment_overrides": sum(1 for r in rows if r["impoundment_suspected"]),
+        },
+    }
 
 
 @app.get("/api/hazards")

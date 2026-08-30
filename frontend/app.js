@@ -896,18 +896,20 @@ async function renderNearby(place) {
 }
 
 function showTab(which) {
-  ['feeds', 'explore', 'updates'].forEach((t) => {
+  ['feeds', 'explore', 'updates', 'model'].forEach((t) => {
     $(`#pane-${t}`).hidden = t !== which;
     $(`#tab-${t}`).setAttribute('aria-selected', String(t === which));
   });
   if (typeof writeHash === 'function') writeHash();
   if (which === 'explore' && satMap) setTimeout(() => satMap.invalidateSize(), 0);
   if (which === 'updates') renderUpdates();
+  if (which === 'model') renderModel();
 }
 
 $('#tab-feeds').addEventListener('click', () => showTab('feeds'));
 $('#tab-explore').addEventListener('click', () => showTab('explore'));
 $('#tab-updates').addEventListener('click', () => showTab('updates'));
+$('#tab-model').addEventListener('click', () => showTab('model'));
 
 $('#imagery-layer').addEventListener('change', (e) => {
   state.satLayer = e.target.value;
@@ -967,6 +969,7 @@ function writeHash() {
     if (state.selected) parts.push(`station=${state.selected}`);
     if (!$('#pane-explore').hidden) parts.push('tab=explore');
     else if (!$('#pane-updates').hidden) parts.push('tab=updates');
+    else if (!$('#pane-model').hidden) parts.push('tab=model');
     if (state.theme !== 'dark') parts.push(`theme=${state.theme}`);
     if (state.basemap !== 'dark') parts.push(`basemap=${state.basemap}`);
     if (state.satLayer !== 'esri') parts.push(`imagery=${state.satLayer}`);
@@ -990,7 +993,7 @@ async function applyHash() {
       if (h.tab === 'explore') await exploreAt(st);
       else if (h.tab) showTab(h.tab);
     }
-  } else if (h.tab && ['feeds', 'explore', 'updates'].includes(h.tab)) {
+  } else if (h.tab && ['feeds', 'explore', 'updates', 'model'].includes(h.tab)) {
     showTab(h.tab);
   }
 }
@@ -1261,6 +1264,171 @@ function renderSafety() {
       advice. It does not replace instructions from local officials — if they say
       move, move.
     </p>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Small chart primitives
+//
+// Inline SVG rather than a charting library: these are four simple shapes, and
+// pulling in a 200 KB dependency to draw a bar would cost more than it saves in
+// a console that must load on a bad connection during a flood.
+//
+// All of them take plain arrays and return a string, so they compose into any
+// panel and are trivial to test.
+// ---------------------------------------------------------------------------
+const VIZ = {
+  /* Horizontal bars for named magnitudes. Values are 0-100 unless max given. */
+  bars(items, { max = 100, unit = '' } = {}) {
+    if (!items.length) return '<p class="empty">No data.</p>';
+    const top = Math.max(max, ...items.map((i) => i.value || 0)) || 1;
+    return `<div class="bars">${items.map((i) => `
+      <div class="bar-row">
+        <span title="${esc(i.label)}">${esc(i.label)}</span>
+        <span class="bar"><i style="width:${Math.max(0, Math.min(100, (i.value / top) * 100))}%;
+          ${i.color ? `background:${i.color}` : ''}"></i></span>
+        <b>${Math.round(i.value)}${esc(unit)}</b>
+      </div>`).join('')}</div>`;
+  },
+
+  /* Proportional segments on one line. Reads at a glance where a whole splits. */
+  stack(items) {
+    const total = items.reduce((a, b) => a + (b.value || 0), 0);
+    if (!total) return '<p class="empty">Nothing to show.</p>';
+    return `
+      <div class="stack" role="img" aria-label="${esc(items.map((i) => `${i.label} ${i.value}`).join(', '))}">
+        ${items.filter((i) => i.value > 0).map((i) => `
+          <span style="width:${(i.value / total) * 100}%;background:${i.color || 'var(--accent)'}"
+                title="${esc(i.label)}: ${i.value}"></span>`).join('')}
+      </div>
+      <div class="stack-key">${items.filter((i) => i.value > 0).map((i) => `
+        <span><i style="background:${i.color || 'var(--accent)'}"></i>${esc(i.label)} ${i.value}</span>`).join('')}
+      </div>`;
+  },
+
+  /* A single number with a caption. For counts that need no comparison. */
+  stat(value, label, sub = '') {
+    return `<div class="stat"><b>${esc(String(value))}</b><span>${esc(label)}</span>
+      ${sub ? `<em>${esc(sub)}</em>` : ''}</div>`;
+  },
+
+  /* Skill bar centred on zero: left of centre is worse than doing nothing. */
+  skill(value) {
+    if (value === null || value === undefined) return '<span class="muted">n/a</span>';
+    const pct = Math.max(-1, Math.min(1, value));
+    const w = Math.abs(pct) * 50;
+    const good = pct >= 0;
+    return `<span class="skillbar" title="${(pct * 100).toFixed(2)}% vs persistence">
+      <i style="left:${good ? 50 : 50 - w}%;width:${w || 0.6}%;
+        background:${good ? 'var(--normal)' : 'var(--danger)'}"></i>
+      <em>${(pct * 100).toFixed(1)}%</em></span>`;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Model tab: the analytics ladder, and which forecaster actually wins
+// ---------------------------------------------------------------------------
+const STAGE_NOTE = {
+  cleaning: 'Standardise aggressively, never invent. An unparseable reading becomes null, never zero — zero would score NORMAL and hide an outage.',
+  descriptive: 'What the network is doing right now.',
+  diagnostic: 'What is driving the scores, measured — not the configured weights.',
+  predictive: 'Where gauges are heading, and how far ahead we can see.',
+  prescriptive: 'What someone should therefore do, gated by the time left to do it.',
+};
+
+async function renderModel() {
+  const el = $('#model');
+  el.innerHTML = '<p class="empty">Measuring…</p>';
+  try {
+    const [pipe, bake] = await Promise.all([
+      fetchJson('/api/analytics/pipeline'),
+      fetchJson('/api/models/bakeoff'),
+    ]);
+
+    const bandColors = { SEVERE: '--severe', DANGER: '--danger', WARNING: '--warning', WATCH: '--watch', NORMAL: '--normal' };
+    const bandItems = Object.entries(pipe.descriptive.bands || {})
+      .map(([k, v]) => ({ label: k, value: v, color: cssVar(bandColors[k] || '--accent') }));
+
+    const drivers = Object.entries(pipe.diagnostic.mean_component_contribution || {})
+      .map(([k, v]) => ({ label: k, value: v }));
+
+    const rows = Object.entries(bake.models).map(([name, r]) => {
+      if (!r.available) {
+        return `<tr class="off"><td>${esc(name)}</td><td colspan="3" class="muted small">${esc(r.reason)}</td></tr>`;
+      }
+      if (!r.usable) {
+        return `<tr class="off"><td>${esc(name)}</td><td colspan="3" class="muted small">${esc(r.status || 'insufficient data')}</td></tr>`;
+      }
+      const active = name === bake.active;
+      return `<tr class="${active ? 'active' : ''}">
+        <td>${esc(name)}${active ? ' <span class="tag" style="background:var(--accent)">active</span>' : ''}</td>
+        <td class="num">${r.mae_m}</td>
+        <td>${VIZ.skill(r.skill)}</td>
+        <td class="muted small">${r.trained_on ? r.trained_on.toLocaleString() + ' ex.' : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `
+      <h4>Analytics pipeline</h4>
+      <div class="ladder">
+        ${['cleaning', 'descriptive', 'diagnostic', 'predictive', 'prescriptive'].map((k, i) => `
+          <div class="rung">
+            <span class="rung-n">${i + 1}</span>
+            <div>
+              <b>${k}</b>
+              <p class="muted small">${esc(STAGE_NOTE[k])}</p>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <h4>Cleaning</h4>
+      <div class="stats">
+        ${VIZ.stat(pipe.cleaning.stations_kept ?? '—', 'kept', `of ${pipe.cleaning.stations_in ?? '—'} scraped`)}
+        ${VIZ.stat(pipe.cleaning.reporting_level ?? '—', 'reporting', 'a level')}
+        ${VIZ.stat(pipe.cleaning.with_danger_mark ?? '—', 'danger marks', 'published')}
+      </div>
+
+      <h4>Descriptive</h4>
+      ${VIZ.stack(bandItems)}
+      <div class="stats">
+        ${VIZ.stat(pipe.descriptive.reporting, 'reporting', `of ${pipe.descriptive.gauges} gauges`)}
+        ${VIZ.stat(pipe.descriptive.rising, 'rising', '> 0.02 m/h')}
+        ${VIZ.stat(pipe.descriptive.stored_readings.toLocaleString(), 'readings', 'stored history')}
+      </div>
+
+      <h4>Diagnostic — what is driving scores</h4>
+      ${VIZ.bars(drivers)}
+      <p class="muted small src-note">${esc(pipe.diagnostic.note)}</p>
+
+      <h4>Predictive</h4>
+      <div class="stats">
+        ${VIZ.stat(pipe.predictive.gauges_with_time_to_danger, 'gauges', 'with a time-to-danger')}
+        ${VIZ.stat(pipe.predictive.soonest_hours ?? '—', 'hours', 'soonest to danger')}
+        ${VIZ.stat(Math.round((pipe.predictive.highest_p6h || 0) * 100) + '%', 'peak P(6h)', 'danger breach')}
+      </div>
+
+      <h4>Model bake-off <span class="muted">vs ${esc(bake.baseline)}</span></h4>
+      <table class="bake">
+        <thead><tr><th>model</th><th class="num">MAE m</th><th>skill</th><th>trained</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="gate">${esc(bake.gate)}</p>
+      <p class="muted small src-note"><b>Verdict.</b> ${esc(bake.recommendation)}</p>
+      <p class="muted small src-note">
+        ${bake.training_examples.toLocaleString()} supervised examples available.
+        ${bake.sklearn_available ? '' : 'scikit-learn is not installed, so the learned models are inactive — see backend/requirements-ml.txt.'}
+      </p>
+
+      <h4>Prescriptive</h4>
+      <div class="stats">
+        ${VIZ.stat(pipe.prescriptive.immediate, 'immediate', 'DANGER or SEVERE')}
+        ${VIZ.stat(pipe.prescriptive.elevated, 'elevated', 'WARNING')}
+        ${VIZ.stat(pipe.prescriptive.impoundment_overrides, 'overrides', 'impoundment')}
+      </div>`;
+  } catch (err) {
+    el.innerHTML = '<p class="empty">Could not load the model report.</p>';
+    console.error(err);
+  }
 }
 
 // ---------------------------------------------------------------------------
