@@ -1507,6 +1507,30 @@ async function renderRelief() {
     <p class="muted small src-note">${esc(d.policy)}</p>`;
 }
 
+
+/* On a phone the gauge list is collapsed so the map is above the fold. Tapping
+   its heading expands it. Desktop is unaffected -- the CSS that shortens the
+   list only applies under 820px, so the class is inert there. */
+(function collapsibleGaugeList() {
+  const heading = document.querySelector('.panel:not(.right) > h2');
+  if (!heading) return;
+  const panel = heading.closest('.panel');
+
+  heading.setAttribute('role', 'button');
+  heading.setAttribute('tabindex', '0');
+  heading.setAttribute('aria-expanded', 'false');
+
+  const toggle = () => {
+    const open = panel.classList.toggle('expanded');
+    heading.setAttribute('aria-expanded', String(open));
+  };
+
+  heading.addEventListener('click', toggle);
+  heading.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+})();
+
 /* Region selector. Nepal is the only enabled region today; the others are
    listed but disabled so the extension point is visible rather than implied. */
 async function loadRegions() {
