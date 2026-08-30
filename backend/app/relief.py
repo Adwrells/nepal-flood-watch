@@ -24,7 +24,7 @@ Both destinations below were verified during development: pmdrf.nchl.com.np is
 operated by Nepal Clearing House Ltd, the national payments infrastructure
 operator, and is the gateway named in the PMO's own notice.
 """
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 @dataclass

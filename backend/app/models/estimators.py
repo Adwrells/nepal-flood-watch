@@ -48,7 +48,7 @@ class Persistence:
             return insufficient("no readings", self.name)
         last = clean[-1]
         # Band from observed step-to-step scatter, widened by sqrt(h).
-        deltas = [abs(b - a) for a, b in zip(clean, clean[1:])]
+        deltas = [abs(b - a) for a, b in zip(clean, clean[1:], strict=False)]
         sigma = statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
         horizons, values, lo, hi = [], [], [], []
         for h in range(1, steps + 1):
@@ -128,7 +128,7 @@ class _Learned:
         self.model = self._make()
         self.model.fit(X[:cut], y[:cut])
         preds = self.model.predict(X[cut:])
-        resid = [a - b for a, b in zip(y[cut:], preds)]
+        resid = [a - b for a, b in zip(y[cut:], preds, strict=True)]
         self.residual_sigma = statistics.pstdev(resid) if len(resid) > 1 else 0.0
         self.trained_on = len(X)
         return self

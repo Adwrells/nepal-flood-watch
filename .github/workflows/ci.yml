@@ -33,9 +33,15 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: |
-          pip install -r backend/requirements.txt
-          pip install pytest pytest-cov
+        # requirements-dev.txt pulls in the runtime too, so one file is enough.
+        run: pip install -r backend/requirements-dev.txt
+
+      # Lint before tests: a syntax or import error should fail in seconds.
+      # Ruff's security rules found an XML-attack vector in the RSS parser that
+      # CodeQL did not, so this is not just style enforcement.
+      - name: Lint
+        working-directory: backend
+        run: python -m ruff check app/ tests/
 
       # Unit tests first: they are hermetic and fast, so a broken model fails
       # in seconds rather than after the preflight has set up a database.

@@ -135,6 +135,21 @@ so there is no second process and no build step.
 
 Requires Python 3.11+.
 
+### Dependencies
+
+Three files, split so the runtime stays small:
+
+| File | Contains | When |
+|---|---|---|
+| `backend/requirements.txt` | Runtime — FastAPI, httpx, APScheduler, openpyxl, defusedxml | Always |
+| `backend/requirements-ml.txt` | scikit-learn, for the learned forecasters | Only once a learned model beats persistence (~100 MB) |
+| `backend/requirements-dev.txt` | pytest, coverage, ruff | Working on the project |
+
+```bash
+python launch.py setup --dev       # tests and linting
+python launch.py setup --with-ml   # learned forecasters
+```
+
 
 Configuration is optional — every setting has a working default. Copy
 `.env.example` to `.env` only to change the refresh cadence or enable the fire

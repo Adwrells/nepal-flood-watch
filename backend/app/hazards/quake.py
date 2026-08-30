@@ -7,6 +7,8 @@ Keyless and public. Relevant here for two reasons beyond shaking damage:
     outburst watch level for gauges in its radius;
   * co-seismic landslide risk stays elevated for weeks afterwards.
 """
+from datetime import UTC
+
 import httpx
 
 from ..config import NEPAL_BBOX
@@ -59,12 +61,12 @@ class QuakeSpider:
 
 
 def _days_ago(days: int) -> str:
-    from datetime import datetime, timedelta, timezone
-    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    from datetime import datetime, timedelta
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
 def _iso(ms) -> str:
-    from datetime import datetime, timezone
+    from datetime import datetime
     if not ms:
         return ""
-    return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat(timespec="seconds")
+    return datetime.fromtimestamp(ms / 1000, UTC).isoformat(timespec="seconds")

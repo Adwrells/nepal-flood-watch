@@ -9,6 +9,8 @@
     python launch.py cycle           run one collection cycle and exit
     python launch.py tiles           warm the offline map cache for Nepal
     python launch.py setup           create the venv and install deps, nothing else
+    python launch.py setup --dev     ... plus pytest, coverage and ruff
+    python launch.py setup --with-ml ... plus scikit-learn for the learned models
 
 Bootstraps its own virtual environment on first run, then re-executes itself
 inside it. Nothing outside the stdlib is imported before that happens, so the
@@ -29,6 +31,11 @@ ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
 BACKEND = ROOT / "backend"
 REQUIREMENTS = BACKEND / "requirements.txt"
+# Optional extras. Neither is needed to run the console.
+EXTRAS = {
+    "ml": BACKEND / "requirements-ml.txt",     # learned forecasters (~100 MB)
+    "dev": BACKEND / "requirements-dev.txt",   # pytest, coverage, ruff
+}
 
 # The one real difference between platforms: where the venv puts its binaries.
 BIN = "Scripts" if os.name == "nt" else "bin"
@@ -62,11 +69,24 @@ def ensure_venv() -> None:
         install()
 
 
-def install() -> None:
-    print("Installing dependencies ...")
+def install(extras: list[str] | None = None) -> None:
+    """Install the runtime, plus any named extras.
+
+    Extras are opt-in because the console does not need them: scikit-learn adds
+    ~100 MB for models that are not enabled until they demonstrably beat
+    persistence, and the dev tools are only for working on the project.
+    """
+    print("Installing dependencies ...", flush=True)
     subprocess.run([str(VENV_PY), "-m", "pip", "install", "--upgrade", "pip", "-q"], check=True)
     subprocess.run([str(VENV_PY), "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS)], check=True)
-    print("Dependencies ready.")
+    for name in extras or []:
+        path = EXTRAS.get(name)
+        if not path or not path.exists():
+            print(f"  unknown extra '{name}', skipping", flush=True)
+            continue
+        print(f"  installing extra: {name}", flush=True)
+        subprocess.run([str(VENV_PY), "-m", "pip", "install", "-q", "-r", str(path)], check=True)
+    print("Dependencies ready.", flush=True)
 
 
 def reexec(argv: list[str]) -> int:
@@ -187,7 +207,16 @@ def cmd_tiles(args) -> int:
 
 
 def cmd_setup(args) -> int:
+    extras = []
+    if getattr(args, "with_ml", False):
+        extras.append("ml")
+    if getattr(args, "dev", False):
+        extras.append("dev")
+    if extras:
+        install(extras)
     print(f"Environment ready: {VENV_PY}")
+    if extras:
+        print(f"Extras installed: {', '.join(extras)}")
     return 0
 
 
@@ -223,6 +252,10 @@ def build_parser() -> argparse.ArgumentParser:
     t.set_defaults(func=cmd_tiles)
 
     u = sub.add_parser("setup", help="create the venv and install dependencies only")
+    u.add_argument("--with-ml", action="store_true",
+                   help="also install scikit-learn for the learned forecasters (~100 MB)")
+    u.add_argument("--dev", action="store_true",
+                   help="also install pytest, coverage and ruff")
     u.set_defaults(func=cmd_setup)
 
     return p

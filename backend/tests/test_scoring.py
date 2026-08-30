@@ -96,7 +96,7 @@ class TestForecast:
     def test_values_sit_inside_their_own_band(self):
         fc = holt_forecast([2.1, 2.2, 2.35, 2.5, 2.7, 2.95, 3.3], steps=6)
         assert len(fc.values) == 6
-        for lo, v, hi in zip(fc.lower, fc.values, fc.upper):
+        for lo, v, hi in zip(fc.lower, fc.values, fc.upper, strict=True):
             assert lo <= v <= hi
 
     def test_band_widens_with_horizon(self):

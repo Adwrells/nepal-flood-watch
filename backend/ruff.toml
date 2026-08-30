@@ -1,0 +1,36 @@
+# Lint configuration.
+#
+# Rules are opt-in rather than "all", so every enabled check is one we actually
+# want. Line length is 100 to match the existing style, which favours a comment
+# that explains itself over one wrapped to fit.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes: undefined names, unused imports and variables
+    "I",      # import ordering
+    "UP",     # outdated syntax
+    "B",      # bugbear: likely bugs, not style
+    "S",      # bandit security checks
+]
+ignore = [
+    "E501",   # line length is handled by the formatter, not as an error
+    "S101",   # assert: the preflight and the tests are built on it
+    "B008",   # FastAPI Depends() in defaults is the documented pattern
+]
+
+[lint.per-file-ignores]
+# preflight.py is a diagnostic script, not library code. Its checks are written
+# one-per-line with semicolons so each reads as a single assertion, which is the
+# point of the file.
+"app/preflight.py" = ["E401", "E702"]
+# Tests import inside functions deliberately, to prove a module loads in
+# isolation and to skip cleanly when an optional dependency is absent.
+"tests/*" = ["E402", "F401"]
+# pipeline.py builds two IN-clauses by interpolating PLACEHOLDERS ("?,?,?") --
+# never values, which are passed as bound parameters. sqlite3 offers no way to
+# bind a variable-length IN list, so this is the only option, and the comment
+# above each one says so. Ruff cannot see the distinction.
+"app/pipeline.py" = ["S608"]

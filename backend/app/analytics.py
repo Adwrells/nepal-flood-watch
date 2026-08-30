@@ -12,9 +12,9 @@ nine readings would look more impressive and tell you less.
 """
 import math
 import statistics
+from dataclasses import asdict, dataclass
 
 from dateutil import parser as dtparse
-from dataclasses import dataclass, asdict
 
 # Holt smoothing constants. alpha weights the level, beta the trend.
 #
@@ -62,7 +62,6 @@ def holt_forecast(series: list[float], steps: int = 12, hours_per_step: float = 
     """
     clean = [v for v in series if v is not None]
     if len(clean) < 3:
-        last = clean[-1] if clean else 0.0
         return Forecast([], [], [], [], "insufficient-history", "low",
                         f"need 3+ readings, have {len(clean)}")
 

@@ -10,8 +10,15 @@ way with more ceremony, so every model faces the same test on the same data.
 import statistics
 
 from .base import Forecast, Forecaster, insufficient
-from .estimators import (DampedHolt, GradientBoosting, Persistence, RandomForest,
-                         RidgeLinear, SKLEARN, SKLEARN_ERROR)
+from .estimators import (
+    SKLEARN,
+    SKLEARN_ERROR,
+    DampedHolt,
+    GradientBoosting,
+    Persistence,
+    RandomForest,
+    RidgeLinear,
+)
 from .features import FEATURE_NAMES, MIN_HISTORY
 
 REGISTRY = {

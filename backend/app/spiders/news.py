@@ -10,8 +10,13 @@ cycle -- Nepali news sites move their feed paths from time to time.
 """
 import hashlib
 import re
-from xml.etree import ElementTree as ET
+from xml.etree.ElementTree import ParseError
 
+# defusedxml, not xml.etree: these are five third-party feeds, and the stdlib
+# parser is vulnerable to entity-expansion ("billion laughs") and external-entity
+# attacks. A publisher does not have to be malicious for this to matter -- a
+# compromised CMS is enough.
+import defusedxml.ElementTree as ET
 import httpx
 
 from .base import Spider
@@ -65,7 +70,7 @@ class NewsSpider(Spider):
         )
         try:
             root = ET.fromstring(response.content)
-        except ET.ParseError:
+        except ParseError:
             return []                                   # feed served HTML, skip
 
         out = []
@@ -77,7 +82,7 @@ class NewsSpider(Spider):
             hit = [d for d in DISTRICTS if d.lower() in title.lower()]
             out.append(
                 {
-                    "id": hashlib.sha1(link.encode()).hexdigest()[:16],
+                    "id": hashlib.sha256(link.encode()).hexdigest()[:16],
                     "title": title,
                     "url": link,
                     "published": (item.findtext("pubDate") or "").strip(),

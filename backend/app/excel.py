@@ -88,7 +88,7 @@ def export(stations, scores, rain_by_id, incidents, news) -> None:
         ])
         ws.cell(ws.max_row, 5).fill = PatternFill("solid", fgColor=BAND_FILL[s["band"]])
         ws.cell(ws.max_row, 6).number_format = "0.0%"
-    for col, w in zip("ABCDEFGH", [42, 16, 18, 8, 11, 16, 10, 10]):
+    for col, w in zip("ABCDEFGH", [42, 16, 18, 8, 11, 16, 10, 10], strict=True):
         ws.column_dimensions[col].width = w
 
     # --- Stations ---------------------------------------------------------
@@ -158,7 +158,7 @@ def export(stations, scores, rain_by_id, incidents, news) -> None:
         ws.append(row)
     for cell in ws[3]:
         cell.fill, cell.font = HEADER_FILL, HEADER_FONT
-    for col, w in zip("ABCD", [26, 10, 34, 30]):
+    for col, w in zip("ABCD", [26, 10, 34, 30], strict=True):
         ws.column_dimensions[col].width = w
 
     # Atomic swap so an open workbook never sees a partial write.

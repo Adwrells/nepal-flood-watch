@@ -13,7 +13,7 @@ Verification status:
   verified   confirmed against the issuing body's own site during development
   official   published by NDRRMA on their emergency helpline notice
 """
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 @dataclass

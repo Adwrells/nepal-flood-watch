@@ -58,7 +58,7 @@ def c_python():
 
 @check("dependencies importable")
 def c_deps():
-    import apscheduler, fastapi, httpx, openpyxl, uvicorn        # noqa: F401
+    import apscheduler  # noqa: F401
     return "fastapi, uvicorn, httpx, openpyxl, apscheduler"
 
 
@@ -178,7 +178,7 @@ def c_clean():
 def c_analytics():
     fc = analytics.holt_forecast([2.1, 2.2, 2.35, 2.5, 2.7, 2.95, 3.3], steps=6)
     assert len(fc.values) == 6, f"expected 6 horizons, got {len(fc.values)}"
-    assert all(lo <= v <= hi for lo, v, hi in zip(fc.lower, fc.values, fc.upper)), \
+    assert all(lo <= v <= hi for lo, v, hi in zip(fc.lower, fc.values, fc.upper, strict=True)), \
         "forecast values fall outside their own prediction band"
     ttd = analytics.time_to_danger(3.3, 0.25, 4.5)
     assert ttd and 4.0 < ttd < 5.5, f"time to danger {ttd} h is wrong"

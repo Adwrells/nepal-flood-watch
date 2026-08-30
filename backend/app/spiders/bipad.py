@@ -9,7 +9,7 @@ title, so the hazard vocabulary is fetched once from /hazard/ and cached. An
 earlier version filtered on a `hazardTitle` field that does not exist, which
 silently let every fire and snakebite in the country through as flood evidence.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -46,7 +46,7 @@ class BipadIncidentSpider:
         wet_ids = {i for i, t in vocab.items() if t in WET_HAZARD_TITLES}
         outburst_ids = {i for i, t in vocab.items() if t in OUTBURST_TITLES}
 
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+        since = (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
         r = await self.client.get(f"{BASE}/incident/", params={
             "limit": 500, "ordering": "-incident_on", "incident_on__gt": since,
         })

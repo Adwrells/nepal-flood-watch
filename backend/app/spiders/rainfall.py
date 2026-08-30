@@ -38,7 +38,10 @@ class RainfallSpider:
             data = r.json()
             # A single coordinate returns an object; several return a list.
             blocks = data if isinstance(data, list) else [data]
-            for station, block in zip(chunk, blocks):
+            # strict=: a length mismatch means the API returned a different number of
+            # points than we asked for, which must fail loudly, not silently
+            # pair the wrong rainfall with the wrong gauge.
+            for station, block in zip(chunk, blocks, strict=False):
                 mm = [v or 0.0 for v in block.get("hourly", {}).get("precipitation", [])]
                 out.append(
                     {

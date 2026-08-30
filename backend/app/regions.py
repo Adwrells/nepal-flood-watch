@@ -5,7 +5,7 @@ spiders, so adding Bhutan or Uttarakhand later means adding one entry and its
 source adapters -- not rewriting the pipeline. Sources are named, not imported,
 so a region can declare a source that does not exist yet without breaking.
 """
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass

@@ -1,8 +1,35 @@
-APScheduler==3.11.3
+# Core runtime. This is everything the console needs to run.
+#
+# Pinned exactly: this is a warning system, and "it worked last month" is not a
+# deployment strategy. Bump deliberately, then run `python launch.py check`.
+#
+#   pip install -r backend/requirements.txt
+#
+# Optional extras live alongside this file:
+#   requirements-ml.txt    learned forecasters (scikit-learn)
+#   requirements-dev.txt   tests and linting
+
+# --- web ---
 fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# --- scraping ---
 httpx==0.28.1
-openpyxl==3.1.5
-pydantic-settings==2.15.0
-python-dateutil==2.9.0.post0
-selectolax==0.4.11
-uvicorn==0.52.4
+
+# --- scheduling ---
+# Runs the collection cycle in-process. One instance only; see docs/DEPLOY-AWS.md.
+APScheduler==3.11.3
+
+# --- data ---
+openpyxl==3.1.5            # the six-sheet Excel export
+python-dateutil==2.9.0.post0   # parses DHM, BIPAD and RFC-822 timestamps
+pydantic-settings==2.15.0  # config from env / .env
+
+# --- security ---
+# Parses the five news feeds. The stdlib xml parser is vulnerable to entity
+# expansion and external-entity attacks, and these are third-party documents.
+defusedxml==0.7.1
+
+# NOTE: selectolax was removed. It was declared for HTML parsing that ended up
+# being done with a regex and json.loads, so it was a 2 MB C extension carried
+# for nothing. Storage is in sqlite3 and parsing in xml.etree, both stdlib.

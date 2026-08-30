@@ -62,12 +62,16 @@ def _history(station_ids: list[int]) -> dict[int, list]:
         return {}
     out: dict[int, list] = {sid: [] for sid in station_ids}
     with db.conn() as c:
-        rows = c.execute(
-            f"""SELECT station_id, ts, level FROM readings
-                WHERE station_id IN ({','.join('?' * len(station_ids))})
-                ORDER BY station_id, ts DESC""",
-            station_ids,
-        ).fetchall()
+        # noqa: S608 -- only the PLACEHOLDERS are interpolated ("?,?,?"); the
+        # ids themselves are passed as bound parameters below and never reach
+        # the SQL text. sqlite3 has no way to bind a variable-length IN list.
+        placeholders = ",".join("?" * len(station_ids))
+        query = (  # noqa: S608 - see comment above; only placeholders interpolate
+            "SELECT station_id, ts, level FROM readings "
+            f"WHERE station_id IN ({placeholders}) "
+            "ORDER BY station_id, ts DESC"
+        )
+        rows = c.execute(query, station_ids).fetchall()
     for r in rows:
         bucket = out.setdefault(r["station_id"], [])
         if len(bucket) < HISTORY_WINDOW:

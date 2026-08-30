@@ -1,0 +1,14 @@
+# Development and CI: tests, coverage, linting.
+#
+#   pip install -r backend/requirements-dev.txt
+#
+# Includes the core runtime, so this one file is enough to work on the project.
+-r requirements.txt
+
+# --- tests ---
+pytest==9.1.1
+pytest-cov==7.1.0
+
+# --- linting ---
+# ruff covers what flake8, isort and pyupgrade did, in one fast tool.
+ruff==0.14.6
