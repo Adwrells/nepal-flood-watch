@@ -1467,7 +1467,7 @@ function connectLive() {
 
   sse.addEventListener('cycle', () => {
     setLiveState('live', 'updating…');
-    refresh().then(() => setLiveState('live'));
+    refresh().then(() => { setLiveState('live'); return refreshCharts(); });
   });
 
   sse.addEventListener('hello', () => { sseRetry = 0; setLiveState('live'); });
@@ -1625,7 +1625,8 @@ connectLive();
    "what next" and "so what".
    --------------------------------------------------------------------------- */
 
-const chartState = { index: [], sort: 'fsi', filter: '', live: null, telescope: false };
+const chartState = { index: [], sort: 'fsi', filter: '', live: null,
+                     telescope: false, openId: null, anchor: null };
 
 async function renderCharts() {
   const host = $('#charts');
@@ -1634,6 +1635,7 @@ async function renderCharts() {
     const d = await fetchJson('/api/charts/index');
     chartState.index = (d && d.stations) || [];
   }
+  // Anything already loaded is refreshed by refreshCharts() on the next cycle.
   drawChartGrid();
 }
 
@@ -1734,18 +1736,23 @@ async function openChartWindow(id) {
   wrap.querySelector('.cw-sub').textContent =
     [d.district, d.basin, `FSI ${d.fsi}`, d.band].filter(Boolean).join(' · ');
 
-  const paint = () => {
+  const paint = (data, slide) => {
     if (chartState.live) chartState.live.stop();
-    chartState.live = Charts.timeSeries($('#cw-chart'), d, { telescope: chartState.telescope });
+    chartState.live = Charts.timeSeries($('#cw-chart'), data, {
+      telescope: chartState.telescope,
+      transitionFrom: slide ? chartState.anchor : null,
+    });
+    chartState.anchor = chartState.live.anchor;
   };
-  paint();
+  chartState.openId = id;
+  paint(d, false);
 
   $('#cw-scale').addEventListener('click', (e) => {
     chartState.telescope = !chartState.telescope;
     e.currentTarget.setAttribute('aria-pressed', String(chartState.telescope));
     e.currentTarget.classList.toggle('on', chartState.telescope);
     wrap.querySelector('.cw-scale-note').hidden = !chartState.telescope;
-    paint();
+    paint(d, false);
   });
 
   $('#cw-table').addEventListener('click', (e) => {
@@ -1760,7 +1767,40 @@ async function openChartWindow(id) {
   $('#cw-layers').innerHTML = chartLayers(d);
 }
 
+/* Bring the charts up to date when a cycle lands.
+
+   Without this the Charts tab keeps whatever it fetched on first open and an
+   open window stays a snapshot, which is a strange thing for a console whose
+   whole point is that the data moves. The open gauge is refetched at full
+   resolution and repainted with a slide, so an arriving reading is something
+   you can see happen rather than something you find by reloading. */
+async function refreshCharts() {
+  const chartsVisible = !$('#pane-charts').hidden;
+  if (chartsVisible || chartState.index.length) {
+    const d = await fetchJson('/api/charts/index');
+    if (d && d.stations) {
+      chartState.index = d.stations;
+      if (chartsVisible) drawChartGrid();
+    }
+  }
+  if (chartState.openId != null && document.getElementById('chart-win')) {
+    const fresh = await fetchJson(`/api/station/${chartState.openId}/analysis`);
+    // Guard against the window having been closed or switched mid-flight.
+    if (fresh && chartState.openId === fresh.id && document.getElementById('chart-win')) {
+      if (chartState.live) chartState.live.stop();
+      chartState.live = Charts.timeSeries($('#cw-chart'), fresh, {
+        telescope: chartState.telescope,
+        transitionFrom: chartState.anchor,
+      });
+      chartState.anchor = chartState.live.anchor;
+      $('#cw-layers').innerHTML = chartLayers(fresh);
+    }
+  }
+}
+
 function closeChartWindow() {
+  chartState.openId = null;
+  chartState.anchor = null;
   if (chartState.live) { chartState.live.stop(); chartState.live = null; }
   const el = document.getElementById('chart-win');
   if (el) el.remove();

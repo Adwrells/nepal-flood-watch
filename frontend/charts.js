@@ -19,7 +19,8 @@
 const Charts = (() => {
   const TAU_MS = 20 * 60 * 1000;   // telescope time constant: ~20 min stays wide
   const NOW_FRAC = 0.68;           // where "now" sits across the plot width
-  const FPS = 20;                  // smooth enough to read as motion, cheap to leave running
+  const FPS = 20;
+  const SETTLE_MS = 900;           // how long a new reading takes to slide in                  // smooth enough to read as motion, cheap to leave running
 
   /* Reasons to hold the chart still.
    *
@@ -113,6 +114,14 @@ const Charts = (() => {
   function timeSeries(el, data, opts) {
     const o = opts || {};
     const telescope = !!o.telescope;
+    // When a cycle delivers a new reading the chart is rebuilt. Easing the
+    // clock from where the previous render had it makes the history visibly
+    // contract leftward as the new point lands, instead of teleporting. Real
+    // drift is about a pixel every three minutes -- true, but invisible; this
+    // is what makes an arrival readable.
+    const from = o.transitionFrom || null;
+    const nowFn = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const startedAt = nowFn();
     const W = 640, H = 260, M = { t: 14, r: 16, b: 26, l: 44 };
     const pw = W - M.l - M.r, ph = H - M.t - M.b;
 
@@ -166,20 +175,31 @@ const Charts = (() => {
     function frame() {
       if (stopped) return;
       if (timer) { clearTimeout(timer); timer = null; }
-      // A hidden tab stops rescheduling entirely; visibilitychange restarts it.
-      // The very first paint is exempt: pausing before it leaves the chart
-      // stuck on its loading text for anyone whose tab was not focused when
-      // the data arrived.
-      if (paused() && drawnOnce) return;
+
       // Drift is capped at one forecast horizon so an abandoned tab cannot
       // wander somewhere meaningless.
       const drift = Math.min(Date.now() - anchor, Math.max(0, latest - anchor));
-      draw(anchor + (reduceMotion() ? 0 : Math.max(0, drift)));
-      drawnOnce = true;
-      if (paused() || reduceMotion()) return;
-      {
-        timer = setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
+      const live = anchor + (reduceMotion() ? 0 : Math.max(0, drift));
+
+      // A hidden tab paints once at the final position and stops. Animating a
+      // slide nobody can see costs frames and buys nothing; visibilitychange
+      // brings it back up to date. The first paint is never skipped, or the
+      // chart stays on its loading text for anyone whose tab was not focused.
+      if (paused()) {
+        if (!drawnOnce) { draw(live); drawnOnce = true; }
+        return;
       }
+
+      let nowMs = live;
+      if (from && !reduceMotion()) {
+        const t = Math.min(1, (nowFn() - startedAt) / SETTLE_MS);
+        if (t < 1) nowMs = from + (live - from) * (1 - Math.pow(1 - t, 3));  // ease-out cubic
+      }
+
+      draw(nowMs);
+      drawnOnce = true;
+      if (reduceMotion()) return;
+      timer = setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
     }
 
     // Redraw on the way back so the chart is current, not stale then jumpy.
@@ -283,6 +303,9 @@ const Charts = (() => {
 
     frame();
     return {
+      // The clock this render is anchored on. Passing it back as
+      // `transitionFrom` on the next render is what produces the slide.
+      anchor,
       stop() {
         stopped = true;
         if (timer) clearTimeout(timer);
