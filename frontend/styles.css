@@ -192,6 +192,33 @@ input::placeholder { color: var(--muted); }
 .pulse { animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: .95; } 50% { opacity: .25; } }
 
+/* Selection ping: a static halo keeps the exact spot marked at all times, two
+   offset rings breathe outward from it, and a solid core carries the band
+   colour. Every layer is double-outlined in black and white so it reads
+   against a dark basemap, a light one, and satellite imagery alike. */
+.select-ping-wrap { background: none; border: 0; }
+.select-ping { position: relative; display: block; width: 64px; height: 64px; }
+.select-ping-halo, .select-ping-ring {
+  position: absolute; top: 50%; left: 50%; width: 34px; height: 34px;
+  margin: -17px 0 0 -17px; border-radius: 50%;
+  border: 3px solid var(--ping);
+  box-shadow: 0 0 0 1.5px rgba(0,0,0,.65), 0 0 0 3.5px rgba(255,255,255,.4);
+}
+.select-ping-halo { opacity: .9; }
+.select-ping-ring { animation: select-ping 2.2s cubic-bezier(0,0,.2,1) infinite; }
+.select-ping-ring.delay { animation-delay: 1.1s; }
+.select-ping-core {
+  position: absolute; top: 50%; left: 50%; width: 14px; height: 14px;
+  margin: -7px 0 0 -7px; border-radius: 50%; background: var(--ping);
+  border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.65), 0 1px 6px rgba(0,0,0,.6);
+}
+.select-ping.still .select-ping-ring { animation: none; opacity: 0; }
+@keyframes select-ping {
+  0%   { transform: scale(1);    opacity: .85; }
+  70%  { transform: scale(2.7);  opacity: 0; }
+  100% { transform: scale(2.7);  opacity: 0; }
+}
+
 /* ---------- overlay controls ---------- */
 .layers {
   position: absolute; top: var(--s3); left: var(--s3); z-index: 500;
@@ -922,4 +949,5 @@ table.bake tr.off td { opacity: .6; }
   .ts-chart circle animate { display: none; }
   .chart-card { transition: none; }
   .chart-card:hover { transform: none; }
+  .select-ping-ring { animation: none; opacity: .3; transform: scale(1.8); }
 }

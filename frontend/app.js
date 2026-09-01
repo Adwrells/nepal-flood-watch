@@ -90,6 +90,11 @@ tileLayer = L.tileLayer(`/api/tiles/${state.theme}/{z}/{x}/{y}.png?v=${TILE_VERS
 map.createPane('eventsPane');
 map.getPane('eventsPane').style.zIndex = 390;
 
+// The selection ping sits above every marker so it is never buried under a
+// dense cluster of gauges or event pins.
+map.createPane('selectionPane');
+map.getPane('selectionPane').style.zIndex = 650;
+
 // One Leaflet layer group per toggle, so visibility is a single add/remove.
 const groups = {
   gauges: L.layerGroup().addTo(map),
@@ -99,6 +104,27 @@ const groups = {
   quakes: L.layerGroup().addTo(map),
   fires: L.layerGroup().addTo(map),
 };
+const selectionLayer = L.layerGroup().addTo(map);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* Radar-ping highlight for the selected station: a static halo marks the exact
+   spot at all times, two offset rings breathe outward from it, and the core
+   dot carries the band colour. Every ring is double-outlined in black and
+   white so the marker reads against a dark basemap, a light one, and satellite
+   imagery alike -- band colour alone washes out against some of those. */
+function highlightStation(lat, lon, color) {
+  selectionLayer.clearLayers();
+  const html = `<span class="select-ping ${reduceMotion ? 'still' : ''}" style="--ping:${color}">
+      <i class="select-ping-halo"></i>
+      <i class="select-ping-ring"></i>
+      <i class="select-ping-ring delay"></i>
+      <i class="select-ping-core"></i></span>`;
+  L.marker([lat, lon], {
+    icon: L.divIcon({ html, className: 'select-ping-wrap', iconSize: [64, 64], iconAnchor: [32, 32] }),
+    pane: 'selectionPane',
+    interactive: false,
+  }).addTo(selectionLayer);
+}
 
 /* Major-event pins: model alerts, official incidents, and geolocated headlines.
    Teardrop divIcons rather than circles, so an EVENT never reads as a gauge.
@@ -384,14 +410,23 @@ async function selectStation(id) {
         </li>`).join('')}
     </ol>`;
 
-  $('#detail-close').addEventListener('click', () => { $('#detail').hidden = true; state.selected = null; renderList(); });
+  $('#detail-close').addEventListener('click', () => {
+    $('#detail').hidden = true; state.selected = null; renderList(); selectionLayer.clearLayers();
+  });
   $('#detail-chart').addEventListener('click', () => openChartWindow(id));
   $('#detail-explore').addEventListener('click', () => {
     const st = state.stations.find((x) => x.id === id);
     if (st) exploreAt(st);
   });
   const s = state.stations.find((x) => x.id === id);
-  if (s) map.setView([s.lat, s.lon], Math.max(map.getZoom(), 9));
+  if (s) {
+    highlightStation(s.lat, s.lon, bandColor(s.band));
+    const zoom = Math.max(map.getZoom(), 9);
+    // flyTo reads as deliberate, not jarring; reduced-motion users get an
+    // instant recentre instead of the glide.
+    if (reduceMotion) map.setView([s.lat, s.lon], zoom);
+    else map.flyTo([s.lat, s.lon], zoom, { duration: 0.7 });
+  }
 }
 
 
