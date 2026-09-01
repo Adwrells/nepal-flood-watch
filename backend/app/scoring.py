@@ -100,23 +100,69 @@ def rise_rate_mph(level, ts, prev_level, prev_ts) -> float | None:
     return (level - prev_level) / hours
 
 
-def p_exceed_6h(level, danger, rise_rate, next_12h_rain) -> float:
+def rate_sigma(history) -> float | None:
+    """Spread of a gauge's own recent pairwise rise rates, in m/h.
+
+    This is the noise floor on any statement about how fast the river is
+    climbing. Measuring it from the gauge itself means a clean sensor is
+    trusted and a jittery one is not, without hand-tuning either.
+    """
+    pairs = [(t, lv) for t, lv in (history or []) if lv is not None]
+    if len(pairs) < 4:
+        return None
+    rates = []
+    for (t0, v0), (t1, v1) in zip(pairs[-15:], pairs[-14:], strict=False):
+        try:
+            dt = (dtparse.parse(str(t1)) - dtparse.parse(str(t0))).total_seconds() / 3600.0
+        except (ValueError, OverflowError):
+            continue  # an unparseable stamp skips one pair, never the gauge
+        if dt > 0:
+            rates.append((v1 - v0) / dt)
+    if len(rates) < 3:
+        return None
+    mean = sum(rates) / len(rates)
+    var = sum((r - mean) ** 2 for r in rates) / len(rates)
+    return math.sqrt(var)
+
+
+def p_exceed_6h(level, danger, rise_rate, next_12h_rain, sigma=None) -> float:
     """Probability the gauge passes its danger mark within 6 hours.
 
     Linear extrapolation of the observed rise, nudged by forecast rain, then
     squashed through a logistic so the output degrades gracefully rather than
-    snapping between 0 and 1. Scale of 0.35 m means "roughly a third of a metre
-    of headroom is where confidence crosses 50%".
+    snapping between 0 and 1.
+
+    The logistic scale carries two different uncertainties, and leaving out the
+    second one was a real defect. The 0.35 m term is headroom uncertainty --
+    how well we know the level against the mark. The other is the uncertainty
+    in the *rate*, projected over the full six hours: `rise_rate` is measured
+    from a single pair of readings, and on a noisy gauge consecutive pairs
+    disagree wildly. Kankai at Mainachuli produced pairwise rates from
+    -0.562 to +0.775 m/h inside one hour, and this function returned 0% at one
+    end and 100% at the other for a river that did neither.
+
+    With rate uncertainty included, a noisy gauge yields a probability near 50%
+    -- uninformative, which is the honest answer -- while a gauge climbing
+    steadily still reaches high confidence. Callers that cannot supply sigma
+    get the old behaviour, so a missing history degrades rather than crashes.
     """
     if level is None or not danger:
         return 0.0
     rain_push = 0.004 * (next_12h_rain or 0)      # ~4 cm of rise per 100 mm forecast
     projected = level + 6.0 * (rise_rate or 0.0) + rain_push
-    return round(1.0 / (1.0 + math.exp(-(projected - danger) / 0.35)), 3)
+    # Uncertainties add in quadrature; six hours of rate error dominates a
+    # jittery gauge, which is exactly when the old version was most confident.
+    scale = math.sqrt(0.35 ** 2 + (6.0 * (sigma or 0.0)) ** 2)
+    return round(1.0 / (1.0 + math.exp(-(projected - danger) / scale)), 3)
 
 
-def score_station(station, prev_level, prev_ts, rain, incidents, news) -> dict:
-    """Return the full scored record for one gauge."""
+def score_station(station, prev_level, prev_ts, rain, incidents, news,
+                  history=None) -> dict:
+    """Return the full scored record for one gauge.
+
+    `history` is optional so existing callers keep working, but without it
+    the 6-hour exceedance probability has no way to know how noisy the
+    gauge is and will overstate its confidence."""
     past_24h = (rain or {}).get("past_24h", 0.0)
     next_12h = (rain or {}).get("next_12h", 0.0)
     rate = rise_rate_mph(station["level"], station["ts"], prev_level, prev_ts)
@@ -140,7 +186,8 @@ def score_station(station, prev_level, prev_ts, rain, incidents, news) -> dict:
         "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
         "fsi": fsi,
         "band": band_for(fsi),
-        "p_exceed_6h": p_exceed_6h(station["level"], station["danger_level"], rate, next_12h),
+        "p_exceed_6h": p_exceed_6h(station["level"], station["danger_level"], rate,
+                                   next_12h, rate_sigma(history)),
         "rise_rate": round(rate, 4) if rate is not None else None,
         "components": json.dumps(parts),
     }
