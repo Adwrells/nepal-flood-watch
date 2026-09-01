@@ -289,7 +289,10 @@ async def run_cycle() -> dict:
         if prev_ts == s["ts"]:
             prev_level, prev_ts = None, None
 
-        score = score_station(s, prev_level, prev_ts, rain_by_id.get(s["id"]), incidents, news)
+        # `past` goes in so the exceedance probability can widen itself on a
+        # noisy gauge instead of reporting 100% off one jittery reading pair.
+        score = score_station(s, prev_level, prev_ts, rain_by_id.get(s["id"]),
+                              incidents, news, history=past)
 
         rain = rain_by_id.get(s["id"], {})
         signal = outburst.detect_impoundment(

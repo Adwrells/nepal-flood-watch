@@ -65,6 +65,11 @@ It also carries a hazard model that a gauge-threshold system cannot express:
 **landslide- and moraine-dammed lake outburst floods**, the class of event that
 struck Rasuwa in July 2025.
 
+Every gauge is plottable. A **Charts** tab holds one small multiple per river,
+and clicking any of them opens a floating window with the full series, the
+12-hour forecast and its 80% band, DHM's own warning and danger marks, and all
+four analytic layers side by side.
+
 Around that sit the things an operator needs *next*: verified emergency numbers,
 the nearest of Nepal's 16,295 health facilities, official relief-fund channels,
 flood safety guidance, and live headlines — pushed to the browser the moment a
@@ -210,6 +215,61 @@ forecast with its 80% prediction band, and a verdict that cites the rate, the
 sample size and the residual sigma it rests on:
 
 ![Station detail with score drivers, forecast and verdict](docs/images/station-detail.png)
+
+---
+
+## Charts
+
+Every river, plotted. The **Charts** tab is a grid of small multiples — one per
+gauge, ranked by severity, each showing its recent trajectory against its own
+danger mark. In a wall of flat lines, the one that is not flat is the finding.
+
+![Charts tab: one small multiple per river, ranked by severity](docs/images/charts-tab.png)
+
+Clicking any river opens a floating window with the full picture: observed
+level, the 12-hour forecast as a dashed continuation, the 80% prediction
+interval as a shaded cone, and DHM's published warning and danger marks as
+labelled reference lines. Underneath sit the four analytic layers in the order
+an operator needs them — what is happening, why the score says so, what happens
+next, and what to do about it.
+
+![Floating chart window with forecast, prediction band and the four analytic layers](docs/images/chart-window.png)
+
+### Two time axes
+
+Linear is the default and the honest one. **Telescope** maps history onto
+`log(age)`: the last minutes stay wide while older readings contract toward the
+left edge, so days of history and the last quarter-hour share one plot without
+either being squeezed out. The axis relabels itself by age — 48h, 12h, 4h, 1h,
+15m — because clock times on a log scale read as evenly spaced when they are not.
+
+![Telescope view: the time axis is logarithmic in age](docs/images/chart-telescope.png)
+
+It is opt-in, labelled in the UI, and never the default, for one reason: a
+logarithmic time axis **distorts slope**. The same rise drawn in the compressed
+region looks steeper than it does next to "now". That is a fine trade when you
+are scanning for the shape of a long record and a bad one when you are judging
+a rate, so the console says so on screen rather than leaving it to be noticed.
+
+Both modes anchor on a moving clock, which is why the chart drifts on its own:
+the animation is a property of the scale, not a layer on top of it. It pauses
+when the tab is hidden and stops entirely under `prefers-reduced-motion`.
+
+### Two numbers that disagree, on purpose
+
+A gauge card may say *"4.62 h at this rate"* while the forecast line stays flat.
+Both are shown because they answer different questions:
+
+| Number | Method | Read it as |
+|--------|--------|-----------|
+| `X h at this rate` | Straight-line extrapolation of the current rise | Worst case if the rate holds |
+| The forecast line | Damped Holt, trend shrunk by signal-to-noise | The expectation |
+
+Straight-line extrapolation backtested **72% worse than assuming no change at
+all**, which is precisely why the forecast damps it. Showing only the countdown
+would overstate the risk; showing only the forecast would hide a fast riser. The
+predictive panel explains the divergence in place rather than leaving an
+operator to discover it.
 
 ---
 
@@ -440,6 +500,8 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/stations` | All gauges with current scores; filter by `band` or `min_fsi` |
 | `GET /api/summary` | Band counts, KPIs, last-cycle health |
 | `GET /api/station/{id}` | Full analytics ladder plus history for one gauge |
+| `GET /api/station/{id}/analysis` | Chart-ready: observed series, forecast, marks, danger crossing |
+| `GET /api/charts/index` | Every gauge's recent series in one call, for the small multiples |
 | `GET /api/events` | Placeable markers: model alerts, incidents, geolocated news |
 | `GET /api/hazards` | Earthquake and fire events |
 | `GET /api/outburst/alerts` | Gauges showing the impoundment signature |
@@ -480,9 +542,10 @@ nepal-flood-watch/
 │   ├── preflight.py     20 deployment checks
 │   ├── spiders/         one file per source, Scrapy-shaped
 │   └── hazards/         outburst physics, quake, fire, earth rotation
-├── frontend/            index.html, app.js, styles.css — no build step
+├── frontend/            index.html, app.js, charts.js, styles.css — no build step
 ├── deploy/              litestream.yml, entrypoint.sh
-├── docs/                ARCHITECTURE.md, DEPLOY-AWS.md, images/
+├── docs/                ARCHITECTURE.md, ANALYTICS.md, RESEARCH.md, images/
+├── tools/               screenshots.py — regenerates the README images
 └── launch.py            cross-platform launcher
 ```
 

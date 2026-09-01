@@ -793,7 +793,9 @@ table.bake tr.off td { opacity: .6; }
 
 .chart-grid {
   display: grid; gap: var(--s2);
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* 145px lets the side rail hold two columns. The whole point of small
+     multiples is comparing many rivers at once, and one column is a list. */
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
   padding: var(--s3);
 }
 
@@ -845,6 +847,12 @@ table.bake tr.off td { opacity: .6; }
   padding: 6px var(--s2); pointer-events: none; z-index: 5;
   display: grid; gap: 1px; white-space: nowrap;
 }
+/* `display: grid` above outranks the user-agent's [hidden] rule, so without
+   this the tooltip renders as an empty pill whenever it is meant to be gone.
+   Same for the SVG crosshair, where the hidden attribute is not honoured. */
+.ts-tip[hidden] { display: none; }
+.ts-chart .cursor[hidden] { display: none; }
+
 .ts-tip b { font-size: 14px; }
 .tip-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tip-time, .tip-range { font-size: 10px; color: var(--muted); }

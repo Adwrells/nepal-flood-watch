@@ -10,7 +10,7 @@ import json
 import pytest
 
 from app.analytics import holt_forecast, prescribe, time_to_danger, trend_class
-from app.scoring import band_for, level_component, p_exceed_6h, score_station
+from app.scoring import band_for, level_component, p_exceed_6h, rate_sigma, score_station
 
 # A gauge with published marks, used as the baseline for most cases.
 STATION = {
@@ -200,3 +200,73 @@ class TestHydrologicalContext:
         r = forecast_skill(rising)
         assert r["n"] > 0
         assert r["skill"] >= -0.05, f"forecast is worse than persistence: {r}"
+
+
+class TestExceedanceConfidence:
+    """P(danger in 6 h) is the strongest claim this system makes.
+
+    It was measured from a single pair of readings, so on a jittery gauge it
+    swung across the whole range on sensor noise. Kankai at Mainachuli produced
+    pairwise rates from -0.562 to +0.775 m/h inside one hour, and the console
+    showed 100% for a river that did not flood.
+    """
+
+    NOISY = [0.388, -0.245, 0.239, 0.271, -0.562, 0.094, 0.073,
+             -0.448, -0.067, 0.019, 0.265, 0.211, -0.434, 0.775]
+
+    def _series(self, rates, start=2.89):
+        from datetime import datetime, timedelta
+        a = datetime.fromisoformat("2026-09-01T00:00:00+05:45")
+        out, lv = [], start
+        for i, r in enumerate(rates):
+            out.append(((a + timedelta(hours=i)).isoformat(), round(lv, 3)))
+            lv += r
+        out.append(((a + timedelta(hours=len(rates))).isoformat(), round(lv, 3)))
+        return out
+
+    def test_rate_sigma_measures_the_gauges_own_jitter(self):
+        sigma = rate_sigma(self._series(self.NOISY))
+        assert sigma is not None
+        assert sigma == pytest.approx(0.354, abs=0.02)
+
+    def test_rate_sigma_is_zero_for_a_perfectly_steady_climb(self):
+        sigma = rate_sigma(self._series([0.30] * 14))
+        assert sigma == pytest.approx(0.0, abs=1e-9)
+
+    def test_rate_sigma_needs_enough_history_to_mean_anything(self):
+        """Too short a record must return None, not a falsely tiny sigma —
+        which would read as a perfectly clean gauge and restore the bug."""
+        assert rate_sigma([]) is None
+        assert rate_sigma([("2026-09-01T00:00:00+05:45", 1.0)]) is None
+
+    def test_a_noisy_gauge_no_longer_reports_certainty(self):
+        """The headline regression. One lucky reading pair must not produce
+        100% on a gauge whose own rates disagree by more than a metre an hour."""
+        sigma = rate_sigma(self._series(self.NOISY))
+        assert p_exceed_6h(2.89, 4.3, 0.775, 4.5) == 1.0          # the old answer
+        assert p_exceed_6h(2.89, 4.3, 0.775, 4.5, sigma) < 0.9    # the honest one
+
+    def test_a_noisy_gauge_no_longer_reports_impossibility_either(self):
+        """The bug was symmetric: one unlucky pair gave a flat 0%."""
+        sigma = rate_sigma(self._series(self.NOISY))
+        assert p_exceed_6h(2.89, 4.3, -0.562, 4.5) == 0.0
+        assert p_exceed_6h(2.89, 4.3, -0.562, 4.5, sigma) > 0.02
+
+    def test_a_clean_steady_climb_still_earns_high_confidence(self):
+        """Widening the interval for everyone would make the number useless.
+        A gauge that is genuinely climbing must still say so."""
+        sigma = rate_sigma(self._series([0.30] * 14))
+        assert p_exceed_6h(3.9, 4.3, 0.60, 4.5, sigma) > 0.95
+
+    def test_more_noise_never_increases_confidence(self):
+        """Monotonicity: uncertainty may only move the estimate toward 50%."""
+        base = p_exceed_6h(2.89, 4.3, 0.775, 4.5, 0.0)
+        for sigma in (0.1, 0.3, 0.6, 1.2):
+            assert p_exceed_6h(2.89, 4.3, 0.775, 4.5, sigma) <= base
+
+    def test_a_missing_history_degrades_rather_than_crashes(self):
+        """Callers without history keep the old behaviour instead of failing."""
+        assert p_exceed_6h(2.89, 4.3, 0.2, 4.5, None) == p_exceed_6h(2.89, 4.3, 0.2, 4.5)
+
+    def test_no_danger_mark_still_means_no_probability(self):
+        assert p_exceed_6h(2.89, None, 0.775, 4.5, 0.35) == 0.0
