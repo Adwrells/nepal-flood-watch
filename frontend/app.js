@@ -345,6 +345,7 @@ async function selectStation(id) {
         }</span>
       </div>
       <span class="detail-tools">
+        <button class="btn" id="detail-chart" type="button">Chart</button>
         <button class="btn" id="detail-explore" type="button">Satellite</button>
         <button class="btn icon" id="detail-close" aria-label="Close details">&times;</button>
       </span>
@@ -353,7 +354,7 @@ async function selectStation(id) {
     <dl class="facts">
       <dt>Level</dt><dd>${fmt(d.descriptive.level_m)} m</dd>
       <dt>Warning / Danger</dt><dd>${fmt(d.warning_level)} / ${fmt(d.danger_level)} m</dd>
-      <dt>Time to danger</dt><dd>${p.hours_to_danger != null ? p.hours_to_danger + ' h' : 'not rising'}</dd>
+      <dt>At the current rate</dt><dd>${p.hours_to_danger != null ? p.hours_to_danger + ' h to danger' : 'not rising'}</dd>
       <dt>P(danger in 6 h)</dt><dd>${p.p_exceed_6h != null ? Math.round(p.p_exceed_6h * 100) + '%' : '—'}</dd>
       <dt>Percentile</dt><dd>${d.descriptive.percentile_vs_own_history ?? '—'}${d.descriptive.percentile_vs_own_history ? 'th of own history' : ''}</dd>
     </dl>
@@ -384,6 +385,7 @@ async function selectStation(id) {
     </ol>`;
 
   $('#detail-close').addEventListener('click', () => { $('#detail').hidden = true; state.selected = null; renderList(); });
+  $('#detail-chart').addEventListener('click', () => openChartWindow(id));
   $('#detail-explore').addEventListener('click', () => {
     const st = state.stations.find((x) => x.id === id);
     if (st) exploreAt(st);
@@ -896,7 +898,7 @@ async function renderNearby(place) {
 }
 
 function showTab(which) {
-  ['feeds', 'explore', 'updates', 'model'].forEach((t) => {
+  ['feeds', 'explore', 'updates', 'model', 'charts'].forEach((t) => {
     $(`#pane-${t}`).hidden = t !== which;
     $(`#tab-${t}`).setAttribute('aria-selected', String(t === which));
   });
@@ -904,12 +906,20 @@ function showTab(which) {
   if (which === 'explore' && satMap) setTimeout(() => satMap.invalidateSize(), 0);
   if (which === 'updates') renderUpdates();
   if (which === 'model') renderModel();
+  if (which === 'charts') renderCharts();
 }
 
 $('#tab-feeds').addEventListener('click', () => showTab('feeds'));
 $('#tab-explore').addEventListener('click', () => showTab('explore'));
 $('#tab-updates').addEventListener('click', () => showTab('updates'));
 $('#tab-model').addEventListener('click', () => showTab('model'));
+$('#tab-charts').addEventListener('click', () => showTab('charts'));
+$('#chart-filter').addEventListener('input', (e) => {
+  chartState.filter = e.target.value; drawChartGrid();
+});
+$('#chart-sort').addEventListener('change', (e) => {
+  chartState.sort = e.target.value; drawChartGrid();
+});
 
 $('#imagery-layer').addEventListener('change', (e) => {
   state.satLayer = e.target.value;
@@ -1603,3 +1613,224 @@ try {
 refresh().then(applyHash);
 setInterval(refresh, POLL_MS);
 connectLive();
+
+
+/* ---------------------------------------------------------------------------
+   Charts: every river, and one river up close.
+
+   The tab holds a small multiple per gauge -- enough to spot the one shape that
+   matters in a wall of flat lines. Clicking any of them opens a floating window
+   with the full series, the forecast, and all four analytic layers, because the
+   chart on its own answers "what happened" and an operator also needs "why",
+   "what next" and "so what".
+   --------------------------------------------------------------------------- */
+
+const chartState = { index: [], sort: 'fsi', filter: '', live: null, telescope: false };
+
+async function renderCharts() {
+  const host = $('#charts');
+  if (!chartState.index.length) {
+    host.innerHTML = '<p class="empty">Loading series…</p>';
+    const d = await fetchJson('/api/charts/index');
+    chartState.index = (d && d.stations) || [];
+  }
+  drawChartGrid();
+}
+
+function drawChartGrid() {
+  const host = $('#charts');
+  const q = chartState.filter.toLowerCase();
+  let rows = chartState.index.filter((s) =>
+    !q || [s.name, s.district, s.basin].some((v) => (v || '').toLowerCase().includes(q)));
+
+  // Default order is severity, because a grid of 300 charts is only useful if
+  // the one you need is near the top.
+  const by = {
+    fsi: (a, b) => (b.fsi || 0) - (a.fsi || 0),
+    rise: (a, b) => (b.rise_rate || 0) - (a.rise_rate || 0),
+    name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+  }[chartState.sort];
+  rows = rows.slice().sort(by);
+
+  if (!rows.length) { host.innerHTML = '<p class="empty">No gauge matches that filter.</p>'; return; }
+
+  host.innerHTML = rows.map((s) => `
+    <button class="chart-card" type="button" data-id="${s.id}"
+            aria-label="Open the full chart for ${esc(s.name)}">
+      <span class="cc-head">
+        <span class="cc-name" title="${esc(s.name)}">${esc(s.name)}</span>
+        <span class="cc-band" style="background:${bandColor(s.band)}">${esc(s.band)}</span>
+      </span>
+      ${Charts.thumb(s.series, s.marks)}
+      <span class="cc-foot">
+        <span>${s.level != null ? Number(s.level).toFixed(2) + ' m' : '—'}</span>
+        <span class="muted">${s.marks.danger != null ? 'danger ' + s.marks.danger.toFixed(1) : 'no mark'}</span>
+        ${s.hours_to_danger != null
+          ? `<span class="cc-ttd" title="Straight-line extrapolation of the current rise rate, not the damped forecast">${s.hours_to_danger} h at this rate</span>` : ''}
+      </span>
+    </button>`).join('');
+
+  host.querySelectorAll('.chart-card').forEach((b) =>
+    b.addEventListener('click', () => openChartWindow(Number(b.dataset.id))));
+}
+
+/* The floating window. Focus is trapped while it is open and returned to the
+   element that opened it on close, so keyboard users are not dumped at the top
+   of the document. */
+let chartWinOpener = null;
+
+async function openChartWindow(id) {
+  chartWinOpener = document.activeElement;
+  closeChartWindow();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-win-backdrop';
+  wrap.id = 'chart-win';
+  wrap.innerHTML = `
+    <div class="chart-win" role="dialog" aria-modal="true" aria-labelledby="cw-title">
+      <div class="cw-head">
+        <div>
+          <h3 id="cw-title">Loading…</h3>
+          <span class="cw-sub muted"></span>
+        </div>
+        <div class="cw-tools">
+          <button class="btn small" id="cw-scale" type="button" aria-pressed="false"
+                  title="Compress older readings onto a logarithmic age axis">Telescope</button>
+          <button class="btn small" id="cw-table" type="button" aria-pressed="false">Table</button>
+          <button class="btn icon" id="cw-close" aria-label="Close chart">&times;</button>
+        </div>
+      </div>
+      <div class="cw-body">
+        <div class="cw-chart" id="cw-chart"><p class="empty">Loading series…</p></div>
+        <p class="cw-scale-note" hidden>
+          Telescope view: the time axis is logarithmic in age, so the last minutes are
+          wide and older readings compress leftward. Useful for long history —
+          but slopes in the compressed region look steeper than they are.
+        </p>
+        <div class="cw-table-wrap" hidden></div>
+        <div class="cw-layers" id="cw-layers"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+
+  const close = () => closeChartWindow();
+  $('#cw-close').addEventListener('click', close);
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+    if (e.key !== 'Tab') return;
+    const f = wrap.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  $('#cw-close').focus();
+
+  const d = await fetchJson(`/api/station/${id}/analysis`);
+  if (!d || !document.getElementById('chart-win')) return;
+
+  $('#cw-title').textContent = d.name;
+  wrap.querySelector('.cw-sub').textContent =
+    [d.district, d.basin, `FSI ${d.fsi}`, d.band].filter(Boolean).join(' · ');
+
+  const paint = () => {
+    if (chartState.live) chartState.live.stop();
+    chartState.live = Charts.timeSeries($('#cw-chart'), d, { telescope: chartState.telescope });
+  };
+  paint();
+
+  $('#cw-scale').addEventListener('click', (e) => {
+    chartState.telescope = !chartState.telescope;
+    e.currentTarget.setAttribute('aria-pressed', String(chartState.telescope));
+    e.currentTarget.classList.toggle('on', chartState.telescope);
+    wrap.querySelector('.cw-scale-note').hidden = !chartState.telescope;
+    paint();
+  });
+
+  $('#cw-table').addEventListener('click', (e) => {
+    const w = wrap.querySelector('.cw-table-wrap');
+    const show = w.hidden;
+    w.hidden = !show;
+    e.currentTarget.setAttribute('aria-pressed', String(show));
+    e.currentTarget.classList.toggle('on', show);
+    if (show && !w.innerHTML) w.innerHTML = Charts.table(d);
+  });
+
+  $('#cw-layers').innerHTML = chartLayers(d);
+}
+
+function closeChartWindow() {
+  if (chartState.live) { chartState.live.stop(); chartState.live = null; }
+  const el = document.getElementById('chart-win');
+  if (el) el.remove();
+  if (chartWinOpener && chartWinOpener.focus) chartWinOpener.focus();
+  chartWinOpener = null;
+}
+
+/* The four layers, in the order an operator needs them: what is happening,
+   why the score says so, what happens next, and what to do about it. */
+function chartLayers(d) {
+  const de = d.descriptive || {}, pr = d.predictive || {}, ps = d.prescriptive || {};
+  const cross = d.crossing;
+
+  const pct = de.percentile_vs_own_history;
+  const descriptive = `
+    <dl class="facts">
+      <dt>Level now</dt><dd>${fmt(de.level_m)} m</dd>
+      <dt>Trend</dt><dd>${esc(de.trend === 'unknown' ? 'awaiting a second reading' : de.trend || '—')}</dd>
+      <dt>Acceleration</dt><dd>${de.acceleration_m_per_h2 != null
+        ? fmt(de.acceleration_m_per_h2) + ' m/h²' : '—'}</dd>
+      <dt>Against its own record</dt><dd>${pct != null ? pct + 'th percentile' : '—'}</dd>
+      <dt>Reporting</dt><dd>${esc((de.reporting && de.reporting.state) || '—')}</dd>
+      <dt>Rain 24 h / next 12 h</dt><dd>${fmt(d.rainfall.past_24h)} / ${fmt(d.rainfall.next_12h)} mm</dd>
+    </dl>`;
+
+  const diagnostic = `
+    ${componentBars(d.diagnostic)}
+    ${d.impoundment && d.impoundment.suspected
+      ? `<p class="warn-note">Impoundment suspected — ${esc(d.impoundment.reason || '')}</p>` : ''}`;
+
+  const predictive = `
+    <dl class="facts">
+      <dt>Method</dt><dd>${esc(pr.method || '—')} (${esc(pr.confidence || '—')} confidence)</dd>
+      <dt>At the current rate</dt><dd>${pr.hours_to_danger != null
+        ? pr.hours_to_danger + ' h to danger' : 'not rising toward danger'}</dd>
+      <dt>P(danger in 6 h)</dt><dd>${pr.p_exceed_6h != null
+        ? Math.round(pr.p_exceed_6h * 100) + '%' : '—'}</dd>
+      <dt>Interval</dt><dd>${esc(pr.interval || '')}</dd>
+    </dl>
+    ${cross
+      ? `<p class="${cross.certainty === 'central' ? 'warn-note' : 'muted small'}">
+           Forecast reaches the danger mark in ${cross.hours_ahead} h
+           ${cross.certainty === 'central'
+             ? '(central estimate).'
+             : '— but only at the top of the 80% range, so this is a tail risk, not the expectation.'}
+         </p>`
+      : '<p class="muted small">The damped forecast does not reach the danger mark within the horizon.</p>'}
+    ${pr.hours_to_danger != null && !cross
+      ? `<p class="muted small">Those two lines disagree on purpose. The countdown above extrapolates
+           the current rise rate in a straight line; the forecast damps that trend and shrinks it by
+           its signal-to-noise ratio. Straight-line extrapolation backtested 72% worse than assuming
+           no change at all, so treat the countdown as a worst case if the rate holds, and the
+           forecast as the expectation.</p>` : ''}
+    ${pr.note ? `<p class="evidence">Basis: ${esc(pr.note)}</p>` : ''}`;
+
+  const prescriptive = `
+    <ol class="actions">${(ps.actions || []).map((a) => `
+      <li class="${a.feasible ? '' : 'infeasible'}">${esc(a.action)}
+        ${a.note ? `<span class="muted small">${esc(a.note)}</span>` : ''}</li>`).join('')}
+    </ol>`;
+
+  const block = (n, title, why, body) => `
+    <section class="cw-layer">
+      <h4><span class="cw-step">${n}</span>${title}</h4>
+      <p class="cw-why muted small">${why}</p>
+      ${body}
+    </section>`;
+
+  return block(1, 'Descriptive', 'What the gauge is doing right now.', descriptive) +
+    block(2, 'Diagnostic', 'Which inputs produced that score, and how much each contributed.', diagnostic) +
+    block(3, 'Predictive', 'Where the level goes next, and how sure that is.', predictive) +
+    block(4, 'Prescriptive', 'What to do, given the lead time actually available.', prescriptive);
+}
