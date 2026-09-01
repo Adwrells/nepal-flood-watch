@@ -24,7 +24,7 @@ const state = {
   selected: null,
   filter: '',
   layers: { gauges: true, impoundment: true, events: true, quakes: true,
-            fires: true, facilities: false },
+            fires: true, facilities: true },
   facilities: [],
   theme: localStorage.getItem('theme') || 'dark',
   region: 'NP',
