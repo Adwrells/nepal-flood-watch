@@ -44,11 +44,25 @@ CREATE TABLE IF NOT EXISTS resources (
 CREATE TABLE IF NOT EXISTS cycles (
     started TEXT PRIMARY KEY, finished TEXT, ok INTEGER, notes TEXT
 );
+-- One row per alert this system raised (a band crossing into WARNING+, or an
+-- impoundment signal). Append-only log, later updated in place by
+-- prediction_log.verify_pending() once there has been time for an official
+-- incident or a news report to appear -- or not. See prediction_log.py.
+CREATE TABLE IF NOT EXISTS prediction_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    station_id INTEGER, station_name TEXT, district TEXT, basin TEXT,
+    lat REAL, lon REAL, ts TEXT, kind TEXT,
+    fsi REAL, band TEXT, p_exceed_6h REAL, hours_to_danger REAL, reason TEXT,
+    verified_at TEXT, corroborated INTEGER, corroboration_source TEXT,
+    corroboration_detail TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(station_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_ts   ON scores(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_hazard_kind ON hazard_events(kind, occurred_on DESC);
 -- Nearest-facility lookups scan by bounding box before computing haversine.
 CREATE INDEX IF NOT EXISTS idx_resources_geo ON resources(kind, lat, lon);
+CREATE INDEX IF NOT EXISTS idx_pred_station_kind ON prediction_events(station_id, kind, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_pending ON prediction_events(corroborated, ts);
 """
 
 

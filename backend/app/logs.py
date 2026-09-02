@@ -119,3 +119,16 @@ def setup(level: int = logging.INFO) -> None:
     # httpx logs a full URL per request; at INFO that buries the cycle summary.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+    # Prediction verification gets its own file, not mixed into the cycle
+    # narrative: "did alert X get echoed by real news" is a different question
+    # from "did the cycle run cleanly", and answering it later means grepping
+    # one small file instead of months of flood-watch.log. propagate=False so
+    # it does not ALSO duplicate into the core log.
+    predictions = logging.handlers.RotatingFileHandler(
+        LOG_DIR / "predictions.log", maxBytes=MAX_BYTES, backupCount=BACKUPS, encoding="utf-8")
+    predictions.setFormatter(formatter)
+    pred_logger = logging.getLogger("prediction_log")
+    pred_logger.setLevel(level)
+    pred_logger.addHandler(predictions)
+    pred_logger.propagate = False

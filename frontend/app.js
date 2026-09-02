@@ -408,6 +408,7 @@ async function selectStation(id) {
       ${d.prescriptive.actions.map((a) => `
         <li class="${a.feasible ? '' : 'infeasible'}">
           ${esc(a.action)}
+          ${a.action_ne ? `<span class="action-ne">${esc(a.action_ne)}</span>` : ''}
           ${a.note ? `<span class="muted small">${esc(a.note)}</span>` : ''}
         </li>`).join('')}
     </ol>`;
@@ -1392,9 +1393,9 @@ async function renderProfileTab() {
       </p>
       ${Object.entries(areasByKind).map(([kind, areas]) => `
         <p class="muted small"><b>${esc(kind)}</b> (${areas.length})</p>
-        <ul class="nearby-list">
-          ${areas.map((a) => `<li class="nearby-row">
-            <span class="nearby-main">${esc(a.name)}${a.note ? `<span class="muted small"> — ${esc(a.note)}</span>` : ''}</span>
+        <ul class="area-list">
+          ${areas.map((a) => `<li class="area-row">
+            <span class="area-main">${esc(a.name)}${a.note ? `<span class="muted small"> — ${esc(a.note)}</span>` : ''}</span>
             <b>${a.area_km2 != null ? a.area_km2.toLocaleString() + ' km²' : '—'}</b>
           </li>`).join('')}
         </ul>`).join('')}`;
@@ -1450,37 +1451,58 @@ map.on('popupopen', (e) => {
 
    The "do not" list leads on driving and walking through water because those
    are consistently the largest single causes of flood deaths worldwide. */
+/* Nepali (ne) alongside English, shown inline -- same convention as
+   emergency.py's label/label_ne and the prescriptive actions' action_ne.
+   Not a toggle: for the reader it is meant for, this line is the guidance. */
 const SAFETY_GUIDE = {
   before: [
-    'Know your evacuation route and a high point you can reach on foot.',
-    'Keep documents, medicines and a torch in one bag you can carry.',
-    'Agree a meeting point with your family in case phones fail.',
-    'Charge phones and power banks when a warning is issued.',
+    { en: 'Know your evacuation route and a high point you can reach on foot.',
+      ne: 'आफ्नो उद्धार मार्ग र पैदल पुग्न सकिने अग्लो ठाउँ पहिचान गर्नुहोस्।' },
+    { en: 'Keep documents, medicines and a torch in one bag you can carry.',
+      ne: 'कागजात, औषधि र टर्च एउटै बोक्न मिल्ने झोलामा राख्नुहोस्।' },
+    { en: 'Agree a meeting point with your family in case phones fail.',
+      ne: 'फोन काम नलागे पनि भेट्ने ठाउँ परिवारसँग पहिल्यै तय गर्नुहोस्।' },
+    { en: 'Charge phones and power banks when a warning is issued.',
+      ne: 'चेतावनी जारी हुनासाथ फोन र पावर बैंक चार्ज गर्नुहोस्।' },
   ],
   during_do: [
-    'Move to higher ground as soon as a warning is issued — do not wait to see water.',
-    'Switch off electricity and gas at the mains before leaving.',
-    'Take your emergency bag; leave everything else.',
-    'Call 1149 (NEOC) or 100 (Police) if you or others are trapped.',
+    { en: 'Move to higher ground as soon as a warning is issued — do not wait to see water.',
+      ne: 'चेतावनी आउनासाथ अग्लो ठाउँमा जानुहोस् — पानी देखेपछि पर्खनु हुँदैन।' },
+    { en: 'Switch off electricity and gas at the mains before leaving.',
+      ne: 'घर छाड्नुअघि मूल स्विचबाट बिजुली र ग्यास बन्द गर्नुहोस्।' },
+    { en: 'Take your emergency bag; leave everything else.',
+      ne: 'आपतकालीन झोला मात्र लानुहोस्; बाँकी सबै छोड्नुहोस्।' },
+    { en: 'Call 1149 (NEOC) or 100 (Police) if you or others are trapped.',
+      ne: 'तपाईं वा अरू कोही फसेमा ११४९ (NEOC) वा १०० (प्रहरी) मा फोन गर्नुहोस्।' },
   ],
   during_dont: [
-    'Do not walk through moving water. 15 cm can knock an adult over.',
-    'Do not drive through a flooded road. 60 cm floats most vehicles.',
-    'Do not cross a bridge with water rising against it.',
-    'Do not enter a river channel that has gone unusually dry — that can mean an upstream blockage is about to fail.',
-    'Do not touch electrical equipment while wet or standing in water.',
+    { en: 'Do not walk through moving water. 15 cm can knock an adult over.',
+      ne: 'बगिरहेको पानीबाट हिँड्नु हुँदैन। १५ से.मी. पानीले पनि व्यक्तिलाई लडाउन सक्छ।' },
+    { en: 'Do not drive through a flooded road. 60 cm floats most vehicles.',
+      ne: 'डुबेको सडकमा गाडी नचलाउनुहोस्। ६० से.मी. पानीले धेरैजसो गाडी बगाउन सक्छ।' },
+    { en: 'Do not cross a bridge with water rising against it.',
+      ne: 'पानी बढिरहेको पुलबाट वारपार नगर्नुहोस्।' },
+    { en: 'Do not enter a river channel that has gone unusually dry — that can mean an upstream blockage is about to fail.',
+      ne: 'असामान्य रूपमा सुकेको नदी नियालमा नपस्नुहोस् — यसले माथिल्लो अवरोध चाँडै भत्किन सक्ने संकेत गर्छ।' },
+    { en: 'Do not touch electrical equipment while wet or standing in water.',
+      ne: 'भिजेको वा पानीमा उभिएको अवस्थामा विद्युतीय उपकरण नछुनुहोस्।' },
   ],
   after: [
-    'Assume flood water is contaminated — wash hands before eating.',
-    'Drink only boiled or treated water; waterborne disease follows floods.',
-    'Do not re-enter a damaged building until it has been checked.',
-    'Call 1115 (Health helpline) for medical advice.',
+    { en: 'Assume flood water is contaminated — wash hands before eating.',
+      ne: 'बाढीको पानी दूषित छ भनी मान्नुहोस् — खानुअघि हात धुनुहोस्।' },
+    { en: 'Drink only boiled or treated water; waterborne disease follows floods.',
+      ne: 'उमालेको वा शुद्धीकरण गरिएको पानी मात्र पिउनुहोस्; बाढीपछि पानीजन्य रोग फैलिन सक्छ।' },
+    { en: 'Do not re-enter a damaged building until it has been checked.',
+      ne: 'जाँच नभएसम्म क्षतिग्रस्त भवनमा फेरि नपस्नुहोस्।' },
+    { en: 'Call 1115 (Health helpline) for medical advice.',
+      ne: 'स्वास्थ्य सल्लाहका लागि १११५ (स्वास्थ्य हेल्पलाइन) मा फोन गर्नुहोस्।' },
   ],
 };
 
 function renderSafety() {
   const list = (items, cls = '') =>
-    `<ul class="guide ${cls}">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    `<ul class="guide ${cls}">${items.map((x) =>
+      `<li>${esc(x.en)}<span class="action-ne">${esc(x.ne)}</span></li>`).join('')}</ul>`;
   return `
     <h4>If a flood is coming</h4>
     <div class="guide-block">
@@ -2082,6 +2104,7 @@ function chartLayers(d) {
   const prescriptive = `
     <ol class="actions">${(ps.actions || []).map((a) => `
       <li class="${a.feasible ? '' : 'infeasible'}">${esc(a.action)}
+        ${a.action_ne ? `<span class="action-ne">${esc(a.action_ne)}</span>` : ''}
         ${a.note ? `<span class="muted small">${esc(a.note)}</span>` : ''}</li>`).join('')}
     </ol>`;
 

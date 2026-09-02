@@ -25,6 +25,7 @@ from . import (
     models,
     official_sources,
     pipeline,
+    prediction_log,
     reference_data,
     regions,
     relief,
@@ -584,6 +585,14 @@ def outburst_glof_watch():
     matters here.
     """
     return glof_watch.rank_glof_watch(_latest_scores())
+
+
+@app.get("/api/predictions/verification")
+def predictions_verification(days: int = 30):
+    """Do this system's own alerts get echoed by an official incident or a
+    matching news headline afterward? See prediction_log.py's module
+    docstring for the forward-looking design and its honest limits."""
+    return prediction_log.summary(days)
 
 
 @app.get("/api/explain/earth-rotation")

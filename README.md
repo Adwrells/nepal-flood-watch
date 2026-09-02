@@ -352,6 +352,39 @@ Sources: [ICIMOD/UNDP's 2026 PDGL inventory](https://www.icimod.org/new-glacial-
 
 ---
 
+## Checking alerts against reality
+
+Every accuracy claim elsewhere in this system is checked against something
+real: the forecast is backtested against a naive baseline before it is
+trusted, and the outburst constants are calibrated against Tangjiashan and
+Rasuwa. The one thing nobody was checking was the ordinary flood alert
+itself — when a gauge crosses WARNING or the impoundment detector fires,
+does that correspond to anything a human later reported?
+
+Every cycle now logs an event the first time a station crosses into an alert
+band or the impoundment signal fires, then — once there has been time for a
+real report to appear — checks for a BIPAD incident within 25 km or a
+district-matching headline, **published after the alert, never at or before
+it**. Matching same-cycle corroboration would just restate
+`corroboration_component()`, which is already an input to the score, not
+independent evidence for it.
+
+An alert with no match after 72 hours is marked unconfirmed, not deleted — a
+flood that never happened is itself information. The log is kept in its own
+`logs/predictions.log`, separate from the operational cycle log, and can be
+queried without waiting for the next cycle:
+
+```bash
+python -m app.prediction_log
+```
+
+Reported as counts, deliberately not a percentage: a 25 km radius and
+free-text district matching are coarse by design, and dressing that up as a
+calibrated accuracy score would be exactly the invented precision this
+project avoids everywhere else.
+
+---
+
 ## On dams and Earth's rotation
 
 The system includes a worked answer to a claim that comes up often: that Chinese
@@ -570,6 +603,7 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/outburst/alerts` | Gauges showing the impoundment signature |
 | `GET /api/outburst/scenario` | Breach model; accepts `volume_m3` and `head_m` |
 | `GET /api/outburst/glof-watch` | Nepal's known priority glacial lakes, cross-checked against live gauges |
+| `GET /api/predictions/verification` | Do this system's alerts get echoed by an official incident or headline afterward? |
 | `GET /api/explain/earth-rotation` | The length-of-day calculation |
 | `GET /api/emergency` | Verified emergency contacts, national and district |
 | `GET /api/facilities/nearest` | Closest health facilities to a point |
@@ -607,6 +641,7 @@ nepal-flood-watch/
 │   ├── relief.py        official donation links (no account numbers, by design)
 │   ├── reference_data.py  census demographics + DNPWC protected areas (static)
 │   ├── official_sources.py  45-min reachability check on linked official sources
+│   ├── prediction_log.py  do alerts get echoed by an official report afterward?
 │   ├── logs.py          rotating file logs, UTF-8 pinned
 │   ├── preflight.py     20 deployment checks
 │   ├── spiders/         one file per source, Scrapy-shaped

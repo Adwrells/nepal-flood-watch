@@ -7,7 +7,7 @@ standardise aggressively, never invent.
 """
 import pytest
 
-from app import clean, reference_data, tiles
+from app import clean, prediction_log, reference_data, tiles
 from app.hazards import earth_rotation, glof_watch, outburst
 
 
@@ -171,6 +171,24 @@ class TestSecurityGuards:
         with pytest.raises(KeyError):
             _ = tiles.STYLES["../../etc/passwd"]
 
+    def test_gibs_rejects_a_malformed_date(self):
+        import asyncio
+        assert asyncio.run(tiles.fetch_gibs(None, "flood", "not-a-date", 8, 188, 107)) is None
+
+    def test_remote_content_type_cannot_inject_a_log_line(self):
+        assert "\n" not in tiles._content_kind("image/png\nFAKE ENTRY")
+        assert tiles._content_kind("image/png\nFAKE ENTRY") == "image"
+
+    def test_exception_text_never_reaches_the_log(self):
+        import httpx
+        described = tiles._fault(httpx.ConnectTimeout("https://secret.example/path?token=abc"))
+        assert "secret.example" not in described
+        assert described == "ConnectTimeout"
+
+    def test_tiles_outside_nepal_are_refused(self):
+        assert tiles.in_nepal_tile(*tiles.deg2num(27.7, 85.3, 8), 8)
+        assert not tiles.in_nepal_tile(*tiles.deg2num(48.8, 2.3, 8), 8)
+
 
 class TestGlofWatch:
     """The known-lake ranking, not a breach predictor -- see the module's own
@@ -251,20 +269,48 @@ class TestReferenceData:
         for row in reference_data.wildlife()["species_counts"]:
             assert row["survey_year"] is not None or "note" in row
 
-    def test_gibs_rejects_a_malformed_date(self):
-        import asyncio
-        assert asyncio.run(tiles.fetch_gibs(None, "flood", "not-a-date", 8, 188, 107)) is None
 
-    def test_remote_content_type_cannot_inject_a_log_line(self):
-        assert "\n" not in tiles._content_kind("image/png\nFAKE ENTRY")
-        assert tiles._content_kind("image/png\nFAKE ENTRY") == "image"
+class TestPredictionLog:
+    """find_match() is the whole verification logic, and it is pure -- no DB,
+    no clock mocking beyond passing timestamps directly. The one rule that
+    must hold: a match strictly AFTER the event counts, a match before or
+    concurrent with it does not, because same-cycle corroboration is already
+    an input to the FSI (scoring.corroboration_component) and would make this
+    circular rather than independent evidence."""
 
-    def test_exception_text_never_reaches_the_log(self):
-        import httpx
-        described = tiles._fault(httpx.ConnectTimeout("https://secret.example/path?token=abc"))
-        assert "secret.example" not in described
-        assert described == "ConnectTimeout"
+    EVENT = {"ts": "2026-08-01T12:00:00+05:45", "lat": 27.7, "lon": 85.3,
+              "district": "Rasuwa"}
 
-    def test_tiles_outside_nepal_are_refused(self):
-        assert tiles.in_nepal_tile(*tiles.deg2num(27.7, 85.3, 8), 8)
-        assert not tiles.in_nepal_tile(*tiles.deg2num(48.8, 2.3, 8), 8)
+    def test_matches_a_nearby_incident_reported_afterward(self):
+        incidents = [{"title": "Flooding reported", "source": "BIPAD",
+                      "occurred_on": "2026-08-01T18:00:00+05:45",
+                      "lat": 27.71, "lon": 85.31}]
+        match = prediction_log.find_match(self.EVENT, incidents, [])
+        assert match == ("incident", "Flooding reported (BIPAD)")
+
+    def test_ignores_an_incident_that_predates_the_event(self):
+        """A report from before the alert cannot be evidence the alert was right."""
+        incidents = [{"title": "Old flood", "source": "BIPAD",
+                      "occurred_on": "2026-07-30T00:00:00+05:45",
+                      "lat": 27.71, "lon": 85.31}]
+        assert prediction_log.find_match(self.EVENT, incidents, []) is None
+
+    def test_ignores_an_incident_outside_the_corroboration_radius(self):
+        incidents = [{"title": "Far away", "source": "BIPAD",
+                      "occurred_on": "2026-08-01T18:00:00+05:45",
+                      "lat": 28.5, "lon": 84.0}]
+        assert prediction_log.find_match(self.EVENT, incidents, []) is None
+
+    def test_matches_a_district_headline_published_afterward(self):
+        news = [{"title": "Rasuwa villages flooded", "source": "Kathmandu Post",
+                 "published": "2026-08-02T09:00:00+05:45", "districts": "rasuwa"}]
+        match = prediction_log.find_match(self.EVENT, [], news)
+        assert match == ("news", "Rasuwa villages flooded (Kathmandu Post)")
+
+    def test_ignores_a_headline_for_a_different_district(self):
+        news = [{"title": "Kaski villages flooded", "source": "Kathmandu Post",
+                 "published": "2026-08-02T09:00:00+05:45", "districts": "kaski"}]
+        assert prediction_log.find_match(self.EVENT, [], news) is None
+
+    def test_no_evidence_at_all_returns_none(self):
+        assert prediction_log.find_match(self.EVENT, [], []) is None

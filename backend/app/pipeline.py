@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 from dateutil.parser import parse as dtparse
 
-from . import analytics, clean, db, excel
+from . import analytics, clean, db, excel, prediction_log
 from .config import settings
 from .hazards import outburst
 from .hazards.fire import FireSpider
@@ -98,10 +98,15 @@ RETENTION_DAYS = {
     "news": 30,
     "hazard_events": 90,
     "cycles": 30,
+    # A verification log, not a working dataset -- kept far longer than
+    # scores so a "how has this alert performed over months" question is
+    # answerable. See prediction_log.py.
+    "prediction_events": 180,
 }
 _TS_COLUMN = {
     "readings": "ts", "scores": "ts", "incidents": "occurred_on",
     "news": "published", "hazard_events": "occurred_on", "cycles": "started",
+    "prediction_events": "ts",
 }
 
 
@@ -311,6 +316,17 @@ async def run_cycle() -> dict:
         scores.append(score)
 
     _persist(stations, rainfall, incidents, news, scores, hazards)
+
+    # Instrumentation, not the product: a broken verification check must
+    # never take the actual flood scoring down with it.
+    try:
+        n = prediction_log.record_events(stations, scores)
+        verified = prediction_log.verify_pending()
+        if n or verified["confirmed"] or verified["unconfirmed"]:
+            log.info("prediction log: %d new, %s", n, verified)
+    except Exception as exc:                          # noqa: BLE001 - isolate per §pipeline rule
+        log.warning("prediction_log step failed: %s", exc)
+
     pruned = prune()
     if pruned:
         log.info("pruned expired rows: %s", pruned)

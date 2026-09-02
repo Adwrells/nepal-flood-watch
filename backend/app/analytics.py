@@ -320,40 +320,68 @@ def trend_class(rise_rate_mh) -> str:
 # ---------------------------------------------------------------------------
 # Keyed on band. Each action carries a lead-time gate so the UI can suppress
 # advice that no longer has time to be executed.
+#
+# Nepali text (_ne) is shown alongside English, the same convention
+# emergency.py already uses for contact labels -- inline, not a toggle. This
+# is the plain-language public-safety layer; technical/analytic text (score
+# drivers, forecast verdicts, model output) stays English-only by design.
 PLAYBOOK = {
     "SEVERE": [
-        ("Trigger evacuation of the floodplain now", 0),
-        ("Notify DEOC and the ward chair by phone, not email", 0),
-        ("Close river crossings and low bridges", 0),
-        ("Escalate to NEOC / toll-free 1155", 0),
+        ("Trigger evacuation of the floodplain now",
+         "बाढी क्षेत्रबाट अहिले नै उद्धार/स्थानान्तरण सुरु गर्नुहोस्", 0),
+        ("Notify DEOC and the ward chair by phone, not email",
+         "इमेल होइन, फोनबाट DEOC र वडा अध्यक्षलाई खबर गर्नुहोस्", 0),
+        ("Close river crossings and low bridges",
+         "खोला वारपार गर्ने बाटो र होचा पुलहरू बन्द गर्नुहोस्", 0),
+        # NEOC's toll-free number is 1149, not 1155 -- 1155 is the Nepal
+        # Police public helpline (see emergency.py's own correction of the
+        # same mix-up). Fixed here rather than left wrong in an escalation
+        # instruction.
+        ("Escalate to NEOC / toll-free 1149",
+         "NEOC मा सूचना गराउनुहोस् / निःशुल्क नम्बर ११४९", 0),
     ],
     "DANGER": [
-        ("Issue public warning for settlements within 1 km of the channel", 0),
-        ("Pre-position rescue teams and boats", 2),
-        ("Move livestock and vehicles to high ground", 3),
-        ("Confirm the reading against the DHM bulletin before broadcasting", 0),
+        ("Issue public warning for settlements within 1 km of the channel",
+         "नदी किनारदेखि १ कि.मी. भित्रका बस्तीहरूलाई सार्वजनिक चेतावनी जारी गर्नुहोस्", 0),
+        ("Pre-position rescue teams and boats",
+         "उद्धार टोली र डुङ्गाहरू पूर्व-तैनाथ गर्नुहोस्", 2),
+        ("Move livestock and vehicles to high ground",
+         "पशुधन र सवारीसाधन अग्लो ठाउँमा सार्नुहोस्", 3),
+        ("Confirm the reading against the DHM bulletin before broadcasting",
+         "प्रसारण गर्नुअघि जल तथा मौसम विज्ञान विभाग (DHM) को बुलेटिनसँग रिडिङ भिडाउनुहोस्", 0),
     ],
     "WARNING": [
-        ("Alert ward-level focal points to stand by", 4),
-        ("Verify siren and SMS cascade is functional", 6),
-        ("Review evacuation routes for the exposed wards", 6),
-        ("Increase gauge polling to 5-minute intervals", 0),
+        ("Alert ward-level focal points to stand by",
+         "वडा तहका फोकल पोइन्टहरूलाई तयारी अवस्थामा रहन सचेत गराउनुहोस्", 4),
+        ("Verify siren and SMS cascade is functional",
+         "साइरन र SMS सूचना प्रणाली चालु रहेको सुनिश्चित गर्नुहोस्", 6),
+        ("Review evacuation routes for the exposed wards",
+         "जोखिममा परेका वडाहरूको उद्धार मार्ग पुनरावलोकन गर्नुहोस्", 6),
+        ("Increase gauge polling to 5-minute intervals",
+         "गेज अवलोकनलाई ५ मिनेटको अन्तरालमा बढाउनुहोस्", 0),
     ],
     "WATCH": [
-        ("Monitor; no public action yet", 0),
-        ("Check upstream rainfall forecast for the next 12 h", 0),
-        ("Confirm the gauge is reporting (watch for telemetry gaps)", 0),
+        ("Monitor; no public action yet",
+         "अनुगमन गर्नुहोस्; हाल सार्वजनिक कारबाही आवश्यक छैन", 0),
+        ("Check upstream rainfall forecast for the next 12 h",
+         "आगामी १२ घण्टाको माथिल्लो तटीय वर्षाको पूर्वानुमान जाँच्नुहोस्", 0),
+        ("Confirm the gauge is reporting (watch for telemetry gaps)",
+         "गेजले डाटा पठाइरहेको पुष्टि गर्नुहोस् (टेलिमेट्री अवरोधमा ध्यान दिनुहोस्)", 0),
     ],
     "NORMAL": [
-        ("Routine monitoring", 0),
+        ("Routine monitoring", "नियमित अनुगमन", 0),
     ],
 }
 
 OUTBURST_ACTIONS = [
-    "Treat as potential upstream impoundment, NOT a normal low-flow period",
-    "Do not allow riverbed access, sand mining, or crossing on foot",
-    "Contact upstream ward/DEOC for visual confirmation of the channel",
-    "Assume the surge arrives with under an hour of warning",
+    ("Treat as potential upstream impoundment, NOT a normal low-flow period",
+     "यसलाई सामान्य न्यून बहावको अवधि नभई सम्भावित माथिल्लो अवरोध (impoundment) को रूपमा लिनुहोस्"),
+    ("Do not allow riverbed access, sand mining, or crossing on foot",
+     "नदी बगरमा प्रवेश, बालुवा उत्खनन वा पैदल वारपार गर्न नदिनुहोस्"),
+    ("Contact upstream ward/DEOC for visual confirmation of the channel",
+     "नदी नियालको प्रत्यक्ष अवस्था पुष्टि गर्न माथिल्लो वडा/DEOC लाई सम्पर्क गर्नुहोस्"),
+    ("Assume the surge arrives with under an hour of warning",
+     "एक घण्टाभन्दा कम चेतावनी समयमै बाढीको लहर आइपुग्न सक्छ भनी मान्नुहोस्"),
 ]
 
 
@@ -366,10 +394,11 @@ def prescribe(band, hours_to_danger, impoundment_suspected=False, station_name="
     """
     lead = hours_to_danger
     actions = []
-    for text, needs_hours in PLAYBOOK.get(band, PLAYBOOK["NORMAL"]):
+    for text, text_ne, needs_hours in PLAYBOOK.get(band, PLAYBOOK["NORMAL"]):
         feasible = lead is None or needs_hours == 0 or lead >= needs_hours
         actions.append({
             "action": text,
+            "action_ne": text_ne,
             "requires_hours": needs_hours,
             "feasible": feasible,
             "note": "" if feasible else f"needs ~{needs_hours} h, only {lead} h left",
@@ -378,8 +407,8 @@ def prescribe(band, hours_to_danger, impoundment_suspected=False, station_name="
     if impoundment_suspected:
         # Outburst advice overrides the normal ladder: the gauge is falling, so
         # the standard playbook would say "no action" at exactly the wrong time.
-        actions = [{"action": a, "requires_hours": 0, "feasible": True,
-                    "note": "outburst protocol"} for a in OUTBURST_ACTIONS] + actions
+        actions = [{"action": a, "action_ne": a_ne, "requires_hours": 0, "feasible": True,
+                    "note": "outburst protocol"} for a, a_ne in OUTBURST_ACTIONS] + actions
 
     urgency = ("immediate" if band in ("SEVERE", "DANGER") or impoundment_suspected
                else "elevated" if band == "WARNING" else "routine")

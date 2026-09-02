@@ -377,3 +377,49 @@ already reached about DHM's CSRF-guarded rainfall table (§10). A dead link in
 a disaster console is worse than a slow one; checking six URLs every 12
 minutes would not be worth the outbound requests, hence its own slower job
 rather than a step in `pipeline.run_cycle()`.
+
+---
+
+## 14. Prediction verification: does an alert correspond to anything real?
+
+Every other accuracy claim in this codebase is checked against something
+real (§6's bake-off, §4's Tangjiashan/Rasuwa calibration). `prediction_log.py`
+closes the one gap that wasn't: the ordinary flood alert itself.
+
+**The mechanism.** `record_events()` runs every cycle and logs a row the
+first time a station crosses into WARNING+ or `impoundment_suspected` turns
+true, with a 24-hour cooldown per `(station, kind)` so one sustained alert
+does not write a row every 12 minutes. `verify_pending()`, also every cycle,
+checks events at least `VERIFY_DELAY_HOURS` (6) old against the `incidents`
+and `news` tables for a BIPAD incident within `CORROB_RADIUS_KM` (25 km, the
+same constant `scoring.corroboration_component()` uses) or a district-
+matching headline — **occurring strictly after the alert's timestamp.** An
+event with no match after `VERIFY_WINDOW_HOURS` (72) is marked unconfirmed
+and stops being checked; one with a match is marked confirmed immediately.
+
+**Why "after", not "at the same time."** Same-cycle corroboration is already
+an input to the FSI via `w_corroboration` (§3) — checking a fresh alert
+against evidence that helped produce it would be circular, not verification.
+Forward-only matching is what makes this an independent check rather than a
+restatement of a number the score already used.
+
+**Why counts, not a percentage.** A 25 km radius and free-text district
+matching in `news.districts` are coarse instruments. "14 of 20 WARNING+
+alerts this month had a matching report within 3 days" is a defensible
+sentence; "70% accurate" implies a precision neither the radius nor the
+district match can support, and this project does not manufacture that
+precision anywhere else (§10's rule: "every number produced traces to a
+published relation or a stated weight").
+
+**Isolation.** Wrapped in its own try/except in `pipeline.run_cycle()` —
+a bug in the verification instrumentation must never take the actual flood
+scoring down with it, the same rule every spider already follows (§2).
+
+**Its own log file.** `prediction_log`'s logger writes to `logs/predictions.log`
+with `propagate=False`, not into `flood-watch.log` — "did alert X get
+echoed by real news" is a different question from "did the cycle run
+cleanly," and answering it later means grepping one small file instead of
+months of the full cycle narrative.
+
+Run `python -m app.prediction_log` for an immediate report without waiting
+for the next cycle; served live at `/api/predictions/verification`.
