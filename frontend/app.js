@@ -1149,9 +1149,9 @@ const OFFICIAL_SOURCES = [
   { group: 'Representatives', items: [
     { name: 'Balen Shah', detail: 'Mayor, Kathmandu Metropolitan City',
       url: 'https://www.facebook.com/balenOfficial' },
-    { name: 'Sudan Gurung', detail: 'Hami Nepal',
+    { name: 'Sudan Gurung', detail: 'Home Minister, Government of Nepal',
       url: 'https://www.facebook.com/sudangrghaminepal/' },
-    { name: 'Swarnim Wagle', detail: 'Member of Parliament',
+    { name: 'Swarnim Wagle', detail: 'Minister of Finance, Government of Nepal',
       url: 'https://www.facebook.com/swarnim.wagle' },
   ]},
 ];

@@ -8,6 +8,27 @@ this project that has turned out to be the more useful half of the record.
 
 ---
 
+## [v1.5.1] — 2026-09-02
+
+### Fixed
+
+**The right-panel tab bar clipped "GLOF" and hid "Profile" entirely.** Seven
+tabs flexed evenly into a 300px-wide panel, which is narrow by design at
+every viewport, not only on phones — a mobile-only media query fixed the
+symptom on small screens and missed the same overflow on a full-width desktop
+window. The tab strip now scrolls horizontally at every width.
+
+*Found in a screenshot of the new GLOF tab: the label read "GL", cut off
+mid-word.*
+
+**Two Representatives entries were out of date.** Sudan Gurung is Home
+Minister of Nepal (reinstated June 2026, after an April resignation and
+clearance from a government investigation into his landholdings) and Swarnim
+Wagle is Minister of Finance (since March 2026) — both previously listed by
+their pre-cabinet roles (Hami Nepal; Member of Parliament).
+
+---
+
 ## [v1.5.0] — 2026-09-02
 
 A ranked watch list for Nepal's known glacial lakes, a country-profile tab,
@@ -245,6 +266,8 @@ no build step.
 
 ---
 
+[v1.5.1]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.5.1
+[v1.5.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.5.0
 [v1.4.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.4.0
 [v1.3.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.3.0
 [v1.2.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.2.0

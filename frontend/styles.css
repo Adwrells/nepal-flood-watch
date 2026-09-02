@@ -460,11 +460,19 @@ ol.actions li span { display: block; text-decoration: none; }
 .layers input[type="radio"] { accent-color: var(--accent); width: 14px; height: 14px; }
 
 /* ---------- right-panel tabs ---------- */
-.tabs { display: flex; border-bottom: 1px solid var(--border); }
+/* Seven tabs in a 300px-wide panel never fit evenly-flexed -- this was fine
+   at five short labels, not at "Explore"/"Updates"/"Profile". A horizontally
+   scrolling strip beats squeezing every label unreadably thin, and it is the
+   right fix at every viewport: the panel is this narrow by design even on a
+   full-width desktop window, so a mobile-only media query missed it. */
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
 .tabs button {
-  flex: 1; background: none; border: 0; color: var(--muted);
-  padding: var(--s3) var(--s2); font-size: 12px; font-weight: 500;
-  border-bottom: 2px solid transparent;
+  flex: 0 0 auto; background: none; border: 0; color: var(--muted);
+  padding: var(--s3) var(--s3); font-size: 12px; font-weight: 500;
+  white-space: nowrap; border-bottom: 2px solid transparent;
   transition: color .18s ease, border-color .18s ease;
 }
 .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
@@ -982,11 +990,6 @@ table.bake tr.off td { opacity: .6; }
   .chart-win-backdrop { padding: 0; place-items: end stretch; }
   .chart-win { width: 100%; max-height: 92vh; border-radius: 12px 12px 0 0; }
   .cw-body { padding: var(--s3); }
-
-  /* Seven tabs no longer fit evenly-flexed on a phone width; scroll instead
-     of squeezing every label unreadably thin. */
-  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .tabs button { flex: 0 0 auto; padding: var(--s3) var(--s3); white-space: nowrap; }
 }
 
 /* The frame timer already stops for reduced motion; this covers the pulse on
