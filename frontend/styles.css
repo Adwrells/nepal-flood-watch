@@ -487,6 +487,14 @@ ol.actions li span { display: block; text-decoration: none; }
 .pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .pane[hidden] { display: none; }
 
+/* #pane-explore stacks several fixed-height blocks (imagery controls, the
+   satellite map, its zoom/Worldview row, the external-link grid) with no
+   internal scroll region of its own -- unlike the other tabs, which wrap
+   their one variable-length list in a `.scroll` div. When that stack got
+   taller than the flex space available, it overflowed past the pane's own
+   box and visually collided with the `.disclaimer` footer beneath it. */
+#pane-explore { overflow-y: auto; }
+
 /* ---------- explore ---------- */
 .explore-head { padding: var(--s3) var(--s4) 0; }
 .explore-title h3 { font-size: 14px; }

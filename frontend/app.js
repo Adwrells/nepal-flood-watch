@@ -210,11 +210,22 @@ function drawMap() {
       }).bindTooltip(
         `M${h.magnitude} · ${h.title}${trigger ? ' · landslide-capable' : ''}`,
         { direction: 'top' }
-      ).addTo(groups.quakes);
+      ).bindPopup(`
+        <h3>${esc(h.title)}</h3>
+        <dl>
+          <dt>Magnitude</dt><dd>M${h.magnitude}</dd>
+          ${trigger ? '<dt>Note</dt><dd>Landslide-capable</dd>' : ''}
+        </dl>
+        ${mapLinks(h.lat, h.lon, h.title)}`)
+      .addTo(groups.quakes);
     } else if (h.kind === 'fire') {
       L.circleMarker([h.lat, h.lon], {
         radius: 4, fillColor: cssVar('--fire'), fillOpacity: 0.8, weight: 0,
       }).bindTooltip(`${h.title} · ${h.magnitude ?? '?'} MW`, { direction: 'top' })
+        .bindPopup(`
+          <h3>${esc(h.title)}</h3>
+          <dl><dt>Radiative power</dt><dd>${h.magnitude ?? '?'} MW</dd></dl>
+          ${mapLinks(h.lat, h.lon, h.title)}`)
         .addTo(groups.fires);
     }
   });
@@ -361,6 +372,7 @@ async function selectStation(id) {
   writeHash();
   const d = await fetchJson(`/api/station/${id}`);
   const p = d.predictive, fc = p.forecast;
+  const st = state.stations.find((x) => x.id === id);
 
   $('#detail').hidden = false;
   $('#detail').innerHTML = `
@@ -375,9 +387,11 @@ async function selectStation(id) {
       <span class="detail-tools">
         <button class="btn" id="detail-chart" type="button">Chart</button>
         <button class="btn" id="detail-explore" type="button">Satellite</button>
+        ${st && st.lat != null ? `<a class="btn" href="${safeUrl(`https://www.google.com/maps/search/?api=1&query=${st.lat},${st.lon}`)}" target="_blank" rel="noopener noreferrer">Map</a>` : ''}
         <button class="btn icon" id="detail-close" aria-label="Close details">&times;</button>
       </span>
     </div>
+    ${st && st.lat != null ? `<p class="muted small detail-coord">${st.lat.toFixed(4)}, ${st.lon.toFixed(4)}</p>` : ''}
 
     <dl class="facts">
       <dt>Level</dt><dd>${fmt(d.descriptive.level_m)} m</dd>
