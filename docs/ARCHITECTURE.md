@@ -322,3 +322,58 @@ changing a source or before deploying.
 Logs rotate at 5 MB × 5 in `logs/` — `flood-watch.log` for the full narrative,
 `errors.log` for WARNING and above. UTF-8 pinned, because Devanagari headlines
 crash the Windows cp1252 default.
+
+---
+
+## 12. GLOF watch: ranking known danger without inventing a prediction
+
+`hazards/glof_watch.py` answers a question the outburst model above cannot on
+its own: not "is a gauge showing the impoundment signature right now" but
+"which specific lakes are the ones actually worth watching, nationally."
+
+**It ranks, it does not predict.** The six lakes it carries (Tsho Rolpa, Imja
+Tsho, Thulagi, Lower Barun, Lumding Tsho, Hongu 2) are exactly the lakes
+ICIMOD/UNDP's 2026 regional glacial-lake inventory names as Rank I, and that
+DHM/UNDP separately prioritise for risk-reduction work — a citation-backed
+static list, refreshed by editing the file when a newer inventory is
+published, the same convention `reference_data.py` uses for census figures.
+`rank_glof_watch()` then reuses the existing `is_transboundary()` basin/name
+match (plus a district fallback) to ask one narrow, honest question per lake:
+*is a DHM gauge in this headwater currently showing the same
+falling-while-raining signature that flagged Bhote Koshi in July 2025?*
+
+The module docstring states the boundary explicitly, because it would be easy
+to blur: there is no labelled GLOF breach-outcome history in this system to
+backtest a probability or time-to-failure model against, unlike the river
+forecast, which is only trusted after beating a naive baseline
+(`models/__init__.py`'s bake-off, §6). Producing a "risk score" here would be
+exactly the invented-precision failure mode `outburst.py` itself warns against
+("every constant is sourced ... none of it is invented"). So the API returns
+a boolean plus the specific station and reason, not a percentage.
+
+## 13. Country profile: static reference data, cited not fabricated
+
+`reference_data.py` carries two datasets that do not belong in the 12-minute
+pipeline because they do not change on that timescale: 2021 census
+caste/ethnicity shares (National Statistics Office) and DNPWC's protected-area
+system plus flagship species counts (tiger, rhino, elephant). Each figure
+carries its publisher, source URL, and — for species counts — its survey year,
+because a periodic (multi-year) census reported without that year reads as
+current when it may be several years old.
+
+Where a number could not be independently corroborated across sources during
+research (e.g. Rara National Park's area), the field is `None` rather than a
+guess — the same "standardise aggressively, never invent" rule §7 states for
+sensor data applies equally to reference data typed in by hand.
+
+**Official-source health, not a scrape.** `official_sources.py` runs a
+45-minute background job (its own `AsyncIOScheduler` job, separate from the
+flood cycle) that HEAD-checks every link the Updates tab shows, recording
+reachable/unreachable and when it was last confirmed. This exists because
+NDRRMA's "Daily Bulletin" and DHM's notice pages are client-rendered SPAs —
+fetching them returns an empty shell, confirmed directly during development —
+so there is nothing structured to scrape, the same conclusion this project
+already reached about DHM's CSRF-guarded rainfall table (§10). A dead link in
+a disaster console is worse than a slow one; checking six URLs every 12
+minutes would not be worth the outbound requests, hence its own slower job
+rather than a step in `pipeline.run_cycle()`.

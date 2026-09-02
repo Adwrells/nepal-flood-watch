@@ -17,9 +17,21 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, db, emergency, logs, models, pipeline, regions, relief, tiles
+from . import (
+    analytics,
+    db,
+    emergency,
+    logs,
+    models,
+    official_sources,
+    pipeline,
+    reference_data,
+    regions,
+    relief,
+    tiles,
+)
 from .config import NEPAL_BBOX, ROOT, settings
-from .hazards import earth_rotation, outburst
+from .hazards import earth_rotation, glof_watch, outburst
 from .scoring import BANDS, haversine_km
 
 logs.setup()
@@ -35,8 +47,14 @@ async def lifespan(app: FastAPI):
     sched = AsyncIOScheduler(timezone="Asia/Kathmandu")
     sched.add_job(pipeline.run_cycle, "interval", minutes=settings.cycle_minutes,
                   id="cycle", max_instances=1, coalesce=True)
+    # Checking six external homepages is not worth doing every 12 minutes, so
+    # it runs on its own slower, independent job rather than inside the cycle.
+    sched.add_job(official_sources.check_all, "interval",
+                  minutes=official_sources.CHECK_INTERVAL_MINUTES,
+                  id="official_sources", max_instances=1, coalesce=True)
     sched.start()
     asyncio.create_task(pipeline.run_cycle())      # warm start, non-blocking
+    asyncio.create_task(official_sources.check_all())
     log.info("scheduler running every %d min", settings.cycle_minutes)
     yield
     sched.shutdown(wait=False)
@@ -557,10 +575,46 @@ def outburst_stability(dam_height_m: float, dam_volume_m3: float, catchment_area
     return outburst.stability_index(dam_height_m, dam_volume_m3, catchment_area_km2)
 
 
+@app.get("/api/outburst/glof-watch")
+def outburst_glof_watch():
+    """Nepal's known priority glacial lakes, cross-checked against live gauges.
+
+    A ranking of already-identified danger (ICIMOD/UNDP/DHM), not a breach
+    prediction -- see glof_watch.py's module docstring for why that line
+    matters here.
+    """
+    return glof_watch.rank_glof_watch(_latest_scores())
+
+
 @app.get("/api/explain/earth-rotation")
 def explain_earth_rotation():
     """Worked answer on dams, length-of-day, and whether it affects flooding."""
     return earth_rotation.report()
+
+
+# ---------------------------------------------------------------------------
+# Country profile: census demographics, protected areas, official sources
+# ---------------------------------------------------------------------------
+@app.get("/api/reference/demographics")
+def reference_demographics():
+    """2021 census caste/ethnicity summary. Static; see reference_data.py."""
+    return reference_data.demographics()
+
+
+@app.get("/api/reference/wildlife")
+def reference_wildlife():
+    """Nepal's protected areas (DNPWC) and flagship species counts."""
+    return reference_data.wildlife()
+
+
+@app.get("/api/official-sources")
+def official_sources_status():
+    """The Updates tab's linked sources, plus a live reachability check.
+
+    Checked on a 45-minute background job (official_sources.py), never inside
+    the 12-minute flood-scoring cycle.
+    """
+    return official_sources.snapshot()
 
 
 # ---------------------------------------------------------------------------

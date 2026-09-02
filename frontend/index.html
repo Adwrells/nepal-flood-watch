@@ -103,6 +103,7 @@
       <label><input type="checkbox" data-layer="quakes" checked> Earthquakes</label>
       <label><input type="checkbox" data-layer="fires" checked> Active fires</label>
       <label><input type="checkbox" data-layer="facilities" checked> Health facilities</label>
+      <label><input type="checkbox" data-layer="glof"> Glacial lake watch</label>
     </fieldset>
 
     <aside class="detail" id="detail" hidden aria-label="Station detail"></aside>
@@ -116,6 +117,8 @@
       <button role="tab" id="tab-updates" aria-controls="pane-updates" aria-selected="false">Updates</button>
       <button role="tab" id="tab-charts" aria-controls="pane-charts" aria-selected="false">Charts</button>
       <button role="tab" id="tab-model" aria-controls="pane-model" aria-selected="false">Model</button>
+      <button role="tab" id="tab-glof" aria-controls="pane-glof" aria-selected="false">GLOF</button>
+      <button role="tab" id="tab-profile" aria-controls="pane-profile" aria-selected="false">Profile</button>
     </div>
 
     <div class="pane" id="pane-feeds" role="tabpanel" aria-labelledby="tab-feeds">
@@ -177,6 +180,14 @@
 
     <div class="pane" id="pane-model" role="tabpanel" aria-labelledby="tab-model" hidden>
       <div class="scroll" id="model"></div>
+    </div>
+
+    <div class="pane" id="pane-glof" role="tabpanel" aria-labelledby="tab-glof" hidden>
+      <div class="scroll" id="glof"></div>
+    </div>
+
+    <div class="pane" id="pane-profile" role="tabpanel" aria-labelledby="tab-profile" hidden>
+      <div class="scroll" id="profile"></div>
     </div>
 
     <p class="disclaimer">

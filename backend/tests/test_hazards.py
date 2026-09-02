@@ -7,8 +7,8 @@ standardise aggressively, never invent.
 """
 import pytest
 
-from app import clean, tiles
-from app.hazards import earth_rotation, outburst
+from app import clean, reference_data, tiles
+from app.hazards import earth_rotation, glof_watch, outburst
 
 
 class TestBarrierStability:
@@ -170,6 +170,86 @@ class TestSecurityGuards:
         assert tiles.cache_path("dark", 8, 188, 107)          # known style works
         with pytest.raises(KeyError):
             _ = tiles.STYLES["../../etc/passwd"]
+
+
+class TestGlofWatch:
+    """The known-lake ranking, not a breach predictor -- see the module's own
+    scope statement. These tests pin the ranking order and the live
+    cross-check, not any invented probability."""
+
+    def test_six_priority_lakes_are_present(self):
+        names = {lake.name for lake in glof_watch.PRIORITY_LAKES}
+        assert {"Tsho Rolpa", "Imja Tsho", "Thulagi (Dona)",
+                "Lower Barun (Tallopokhari)", "Lumding Tsho",
+                "Hongu 2 (Chamlang South)"} == names
+
+    def test_all_priority_lakes_are_rank_i(self):
+        """Every named lake in the ICIMOD/UNDP 2026 inventory used here is Rank I."""
+        assert all(lake.rank == "I" for lake in glof_watch.PRIORITY_LAKES)
+
+    def test_active_impoundment_surfaces_as_live_corroboration(self):
+        scores = [{"id": 1, "name": "Dudh Koshi at Rabuwabazar", "basin": "koshi",
+                   "district": "Solukhumbu", "impoundment_suspected": True,
+                   "impoundment_reason": "stage down 22% vs prior median"}]
+        out = glof_watch.rank_glof_watch(scores)
+        imja = next(r for r in out["lakes"] if r["lake"]["name"] == "Imja Tsho")
+        assert imja["live_corroboration"] is True
+        assert "Dudh Koshi at Rabuwabazar" in imja["note"]
+
+    def test_no_matching_gauge_is_not_treated_as_corroboration(self):
+        out = glof_watch.rank_glof_watch([])
+        assert all(not r["live_corroboration"] for r in out["lakes"])
+
+    def test_a_quiet_gauge_in_the_same_basin_does_not_falsely_corroborate(self):
+        scores = [{"id": 1, "name": "Dudh Koshi at Rabuwabazar", "basin": "koshi",
+                   "district": "Solukhumbu", "impoundment_suspected": False}]
+        out = glof_watch.rank_glof_watch(scores)
+        imja = next(r for r in out["lakes"] if r["lake"]["name"] == "Imja Tsho")
+        assert imja["live_corroboration"] is False
+        assert imja["nearby_stations"]              # monitored, just not flagged
+
+    def test_live_signal_sorts_above_a_quiet_lake_of_the_same_rank(self):
+        scores = [{"id": 1, "name": "Dudh Koshi at Rabuwabazar", "basin": "koshi",
+                   "district": "Solukhumbu", "impoundment_suspected": True,
+                   "impoundment_reason": "stage down 22% vs prior median"}]
+        out = glof_watch.rank_glof_watch(scores)
+        first = out["lakes"][0]
+        assert first["live_corroboration"] is True
+
+    def test_scope_statement_disclaims_prediction(self):
+        """This is the one assertion that must never be quietly deleted: the
+        module must keep saying what it is not."""
+        out = glof_watch.rank_glof_watch([])
+        assert "not a" in out["scope"].lower()
+
+
+class TestReferenceData:
+    """Country-profile static data: shape and internal consistency, not the
+    specific numbers, since those are edited when a newer census/survey lands."""
+
+    def test_demographics_has_a_cited_source(self):
+        d = reference_data.demographics()
+        assert d["source"]["publisher"]
+        assert d["source"]["url"].startswith("https://")
+
+    def test_major_groups_are_a_minority_of_the_long_tail(self):
+        """142 groups exist; the named top 10 should not overclaim the total."""
+        d = reference_data.demographics()
+        assert sum(g["percent"] for g in d["major_groups"]) < 100
+
+    def test_wildlife_protected_area_counts_match_dnpwc_totals(self):
+        """12 national parks, 1 wildlife reserve, 1 hunting reserve, 6
+        conservation areas -- the officially stated system, not just "some"."""
+        areas = reference_data.wildlife()["protected_areas"]["areas"]
+        by_kind = {}
+        for a in areas:
+            by_kind[a["kind"]] = by_kind.get(a["kind"], 0) + 1
+        assert by_kind == {"National Park": 12, "Wildlife Reserve": 1,
+                            "Hunting Reserve": 1, "Conservation Area": 6}
+
+    def test_species_counts_cite_a_survey_year_or_say_why_not(self):
+        for row in reference_data.wildlife()["species_counts"]:
+            assert row["survey_year"] is not None or "note" in row
 
     def test_gibs_rejects_a_malformed_date(self):
         import asyncio

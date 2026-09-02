@@ -44,6 +44,7 @@
   --quake:   #A78BFA;
   --fire:    #F97316;
   --facility:#22D3EE;
+  --glacier: #7DD3FC;
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
   --radius: 8px;
@@ -191,6 +192,17 @@ input::placeholder { color: var(--muted); }
 
 .pulse { animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: .95; } 50% { opacity: .25; } }
+
+/* GLOF watch pin: a triangle rather than a circle or teardrop, so a known
+   dangerous lake never reads as a gauge or a headline pin. Filled and
+   animated when the live gauge network is currently corroborating it. */
+.glof-pin-wrap { background: none; border: 0; }
+.glof-pin {
+  display: block; font-size: 16px; line-height: 1; color: var(--glof);
+  filter: drop-shadow(0 0 1.5px #000) drop-shadow(0 0 1.5px #000)
+          drop-shadow(0 0 3px rgba(255,255,255,.6));
+}
+.glof-pin.active { animation: pulse 1.6s ease-in-out infinite; }
 
 /* Selection ping: a static halo keeps the exact spot marked at all times, two
    offset rings breathe outward from it, and a solid core carries the band
@@ -687,6 +699,35 @@ ol.actions li span { display: block; text-decoration: none; }
 .src-main .small { display: block; font-weight: 400; }
 .src-go { color: var(--muted); }
 
+/* Background reachability check, not a scrape -- see renderUpdates()'s note. */
+.src-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--border);
+}
+.src-dot.up { background: var(--normal); }
+.src-dot.down { background: var(--danger); }
+
+/* ---------- GLOF watch cards ---------- */
+.glof-cards { display: grid; gap: var(--s3); margin: var(--s3) 0; }
+.glof-card {
+  border: 1px solid var(--border); border-left: 3px solid var(--glacier);
+  border-radius: var(--radius); padding: var(--s3); background: var(--surface-2);
+}
+.glof-card.active { border-left-color: var(--danger); }
+.glof-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); }
+.glof-card p { margin: var(--s1) 0 0; }
+.glof-card a { color: var(--accent); }
+
+/* ---------- Country profile: species cards ---------- */
+.species-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s3); margin: var(--s3) 0; }
+.species-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--s3); background: var(--surface-2); text-align: center;
+  display: grid; gap: 2px;
+}
+.species-card b { font-size: 22px; color: var(--accent); }
+.species-card a { color: var(--accent); margin-top: var(--s1); }
+
 /* ---------- popup map links ---------- */
 .popup-links {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
@@ -941,6 +982,11 @@ table.bake tr.off td { opacity: .6; }
   .chart-win-backdrop { padding: 0; place-items: end stretch; }
   .chart-win { width: 100%; max-height: 92vh; border-radius: 12px 12px 0 0; }
   .cw-body { padding: var(--s3); }
+
+  /* Seven tabs no longer fit evenly-flexed on a phone width; scroll instead
+     of squeezing every label unreadably thin. */
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tabs button { flex: 0 0 auto; padding: var(--s3) var(--s3); white-space: nowrap; }
 }
 
 /* The frame timer already stops for reduced motion; this covers the pulse on

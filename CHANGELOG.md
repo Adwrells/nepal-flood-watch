@@ -8,6 +8,50 @@ this project that has turned out to be the more useful half of the record.
 
 ---
 
+## [v1.5.0] — 2026-09-02
+
+A ranked watch list for Nepal's known glacial lakes, a country-profile tab,
+and a live check on every official link this console points at.
+
+### Added
+
+**GLOF watch.** A new **GLOF** tab and map layer ranking the six glacial
+lakes ICIMOD/UNDP's 2026 regional inventory names Rank I for Nepal — Tsho
+Rolpa, Imja Tsho, Thulagi, Lower Barun, Lumding Tsho, Hongu 2 — each
+cross-checked against the *existing* live impoundment detector for any DHM
+gauge in the same basin/headwater. This is deliberately a ranking of
+already-identified danger, not a breach-probability prediction: unlike the
+river forecast (only trusted after beating a naive baseline, see the model
+bake-off), there is no labelled GLOF outcome history to validate a
+probability model against, so none is offered. `GET /api/outburst/glof-watch`.
+
+**Country profile.** A new **Profile** tab: 2021 census caste/ethnicity
+shares from the National Statistics Office (Chhetri 16.45%, Brahmin-Hill
+11.29%, Magar 6.9%, and more), linking to NSO's own interactive
+province/district/municipality results explorer rather than mirroring it;
+and DNPWC's protected-area system (12 national parks, 1 wildlife reserve, 1
+hunting reserve, 6 conservation areas) with the most recent national survey
+per flagship species — 429 tigers (2026), 752 rhinos (2021), ~230 elephants.
+Every figure carries its publisher, source URL, and survey year.
+`GET /api/reference/demographics`, `GET /api/reference/wildlife`.
+
+**Official-source health check.** The Updates tab's linked government and
+international sources now show a live reachable/unreachable dot, backed by a
+45-minute background job — its own scheduler interval, never inside the
+12-minute flood cycle. Confirmed directly that NDRRMA's "Daily Bulletin" and
+DHM's notice pages are client-rendered SPAs with nothing structured to parse,
+so this checks reachability honestly rather than faking a feed that isn't
+there. `GET /api/official-sources`.
+
+### Tests
+
+Backend test suite grows by 13 cases: `TestGlofWatch` (ranking order, live
+cross-check, the scope-disclaimer assertion that must never be quietly
+deleted) and `TestReferenceData` (source citations present, DNPWC area
+counts match the officially stated totals).
+
+---
+
 ## [v1.4.0] — 2026-09-01
 
 Live charts, a health layer that's actually visible, and a clear marker for
