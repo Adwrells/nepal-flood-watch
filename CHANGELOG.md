@@ -8,6 +8,46 @@ this project that has turned out to be the more useful half of the record.
 
 ---
 
+## [v1.4.0] — 2026-09-01
+
+Live charts, a health layer that's actually visible, and a clear marker for
+the gauge you clicked.
+
+### Added
+
+**Health facilities layer, on by default.** The layer already drew every
+BIPAD-registered facility once zoomed to district level (zoom 10+); it just
+required an opt-in click every session, so most viewers never saw it. Now
+checked by default — still zoom-gated, so the country-level view stays a
+clean severity map rather than a block of 16,295 markers.
+
+**A selection ping that marks and recentres on the picked station.**
+Clicking a gauge in the left panel now flies the map to it and drops a
+band-coloured radar ping in place: a persistent halo keeps the exact spot
+marked between pulses, two offset rings breathe outward continuously, and
+every layer carries a black-and-white double outline so it reads against the
+dark basemap, the light basemap, and satellite imagery alike. Falls back to
+a static ring under `prefers-reduced-motion`.
+
+### Fixed
+
+**Charts froze on first load instead of following the live data.** The
+Charts tab fetched its index once and kept it — thumbnails went stale after
+the first cycle and stayed stale until a page reload. An open floating
+window never updated at all: a new reading could land and the chart in front
+of an operator would not know. Both now refresh on the same server-sent
+event that refreshes everything else, and an arriving reading eases the
+chart's clock forward over 900 ms (ease-out cubic) instead of teleporting,
+so the history visibly slides left rather than jumping.
+
+*Found while testing the fix itself:* the hidden-tab guard returned before
+the second animation frame, so a settle started on a hidden tab froze
+part-way through. A hidden tab now paints once at the final position and
+stops rescheduling entirely — animating a slide nobody can see costs frames
+and buys nothing.
+
+---
+
 ## [v1.3.0] — 2026-09-01
 
 Time-series charts for every river, and a correction to the strongest number
@@ -161,6 +201,7 @@ no build step.
 
 ---
 
+[v1.4.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.4.0
 [v1.3.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.3.0
 [v1.2.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.2.0
 [v1.1.0]: https://github.com/Adwrells/nepal-flood-watch/releases/tag/v1.1.0

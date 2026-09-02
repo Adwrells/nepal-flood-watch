@@ -212,7 +212,9 @@ is why rate of rise carries a quarter of the weight.
 
 Every gauge opens into a full breakdown — the four score drivers, a 12-hour
 forecast with its 80% prediction band, and a verdict that cites the rate, the
-sample size and the residual sigma it rests on:
+sample size and the residual sigma it rests on. Opening a gauge also flies the
+map to it and drops a band-coloured pulse marking the exact spot, so the
+selected station is never lost in a dense cluster:
 
 ![Station detail with score drivers, forecast and verdict](docs/images/station-detail.png)
 
@@ -254,6 +256,11 @@ a rate, so the console says so on screen rather than leaving it to be noticed.
 Both modes anchor on a moving clock, which is why the chart drifts on its own:
 the animation is a property of the scale, not a layer on top of it. It pauses
 when the tab is hidden and stops entirely under `prefers-reduced-motion`.
+
+Both the grid and an open floating window also refresh on the same live push
+that updates the map — a completed cycle re-fetches the open gauge and eases
+its chart forward to the new reading rather than jumping, so a chart in front
+of an operator never goes stale until they close it.
 
 ### Two numbers that disagree, on purpose
 
