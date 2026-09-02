@@ -327,6 +327,31 @@ forecast's measured accuracy and error sources in
 
 ---
 
+## Glacial lake watch
+
+A **GLOF** tab and map layer for the question the outburst model above cannot
+answer on its own: *which specific lakes are the known danger, and is anything
+happening near them right now?*
+
+Nepal's six lakes named as highest priority (Rank I) by ICIMOD and UNDP's 2026
+glacial lake inventory — Tsho Rolpa, Imja Tsho, Thulagi, Lower Barun, Lumding
+Tsho and Hongu 2 — are cross-checked every cycle against the same
+falling-while-raining precursor the river model already uses, for any DHM
+gauge in the same headwater or district.
+
+> **This is a ranking of already-identified danger, not a breach prediction.**
+> Unlike the river forecast, there is no labelled GLOF outcome history to
+> backtest a probability model against, so none is offered. A lake either has
+> a live gauge currently showing the impoundment signature nearby, or it does
+> not — stated plainly, the same discipline the forecast bake-off applies
+> everywhere else in this system.
+
+Sources: [ICIMOD/UNDP's 2026 PDGL inventory](https://www.icimod.org/new-glacial-lake-inventory-report-released-47-potentially-dangerous-glacial-lakes-ranked/)
+(47 lakes across Nepal, Tibet and India, ranked I–III) and
+[DHM/UNDP's risk-reduction priority list](https://www.undp.org/nepal/press-releases/report-icimod-and-undp-identifies-potentially-dangerous-glacial-lakes-koshi-gandaki-and-karnali-river-basins).
+
+---
+
 ## On dams and Earth's rotation
 
 The system includes a worked answer to a claim that comes up often: that Chinese
@@ -398,7 +423,11 @@ Those pages are **linked, not scraped**. Reading a Facebook Page's posts
 requires Graph API access to a Page you administer; these belong to public
 figures and organisations we do not administer. A link is the honest option —
 and it opens the real post, with its comments and video, which no scrape would
-reproduce.
+reproduce. The same applies to NDRRMA's Daily Bulletin and DHM's notice pages:
+both are client-rendered pages with nothing structured to parse, so instead of
+a fake feed, a background job HEAD-checks each linked source every 45 minutes
+and shows a live reachable/unreachable dot next to it — a dead government link
+in a disaster console is worse than a slow one.
 
 **Flood safety guidance** is split into *do* and *do not*, because the failure
 mode in floods is people acting wrongly with confidence rather than freezing.
@@ -425,12 +454,39 @@ Minister Disaster Relief Fund"*.
 
 ---
 
+## Country profile
+
+A **Profile** tab for the national context a flood console otherwise assumes:
+who lives where, and what land is protected.
+
+**Caste and ethnicity** — the major groups from the 2021 census (Chhetri
+16.45%, Brahmin-Hill 11.29%, Magar 6.9%, Tharu 6.2%, Tamang 5.62% and more),
+sourced from the National Statistics Office. National totals only: NSO's own
+[interactive results explorer](https://censusresults.nsonepal.gov.np/) goes
+down to province, district and municipality, and is linked rather than
+mirrored — 753 municipalities of drill-down data belongs in NSO's own tool,
+not duplicated here and left to go stale.
+
+**Wildlife and protected areas** — DNPWC's full protected-area system (12
+national parks, 1 wildlife reserve, 1 hunting reserve, 6 conservation areas)
+and the most recent national survey for each flagship species: **429 tigers**
+(2026 census), **752 greater one-horned rhinos** (2021 count, the world's
+second-largest concentration after Kaziranga), and an estimated **230 Asian
+elephants**.
+
+Every figure names its publisher, its source URL, and — for the species
+counts — its survey year, because a population count from a multi-year census
+reported as if it were current is its own kind of inaccuracy.
+
+---
+
 ## Outputs
 
-**Interactive console** — dark and light themes, five toggleable map layers
-(gauges, impoundment watch, events and alerts, earthquakes, fires), a
-severity-ranked gauge rail, and a detail drawer showing the score breakdown, a
-forecast sparkline with its prediction band, and the recommended actions.
+**Interactive console** — dark and light themes, seven toggleable map layers
+(river gauges, impoundment watch, events and alerts, earthquakes, active
+fires, health facilities, glacial lake watch), a severity-ranked gauge rail,
+and a detail drawer showing the score breakdown, a forecast sparkline with its
+prediction band, and the recommended actions.
 
 Event pins are teardrops rather than discs so an event never reads as a gauge,
 and headline pins placed at a district centroid are drawn hollow because their
@@ -513,11 +569,15 @@ formatting), Rainfall, Incidents, News, and Method.
 | `GET /api/hazards` | Earthquake and fire events |
 | `GET /api/outburst/alerts` | Gauges showing the impoundment signature |
 | `GET /api/outburst/scenario` | Breach model; accepts `volume_m3` and `head_m` |
+| `GET /api/outburst/glof-watch` | Nepal's known priority glacial lakes, cross-checked against live gauges |
 | `GET /api/explain/earth-rotation` | The length-of-day calculation |
 | `GET /api/emergency` | Verified emergency contacts, national and district |
 | `GET /api/facilities/nearest` | Closest health facilities to a point |
 | `GET /api/nearby` | Incidents, gauges, quakes and headlines around a point |
 | `GET /api/relief` | Official donation channels and the PMO safety rule |
+| `GET /api/reference/demographics` | 2021 census caste/ethnicity summary (NSO) |
+| `GET /api/reference/wildlife` | Protected areas and flagship species counts (DNPWC) |
+| `GET /api/official-sources` | Linked official sources plus a live reachability check |
 | `GET /api/basins` | Per-basin coherence — is a rise corroborated by neighbours? |
 | `GET /api/models/bakeoff` | Train and score every forecaster on the same live data |
 | `GET /api/analytics/pipeline` | Cleaning → descriptive → diagnostic → predictive → prescriptive |
@@ -545,10 +605,12 @@ nepal-flood-watch/
 │   ├── regions.py       region registry — the extension point
 │   ├── emergency.py     verified contacts, each with its source
 │   ├── relief.py        official donation links (no account numbers, by design)
+│   ├── reference_data.py  census demographics + DNPWC protected areas (static)
+│   ├── official_sources.py  45-min reachability check on linked official sources
 │   ├── logs.py          rotating file logs, UTF-8 pinned
 │   ├── preflight.py     20 deployment checks
 │   ├── spiders/         one file per source, Scrapy-shaped
-│   └── hazards/         outburst physics, quake, fire, earth rotation
+│   └── hazards/         outburst physics, glof_watch, quake, fire, earth rotation
 ├── frontend/            index.html, app.js, charts.js, styles.css — no build step
 ├── deploy/              litestream.yml, entrypoint.sh
 ├── docs/                ARCHITECTURE.md, ANALYTICS.md, RESEARCH.md, images/

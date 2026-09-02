@@ -24,8 +24,9 @@ const state = {
   selected: null,
   filter: '',
   layers: { gauges: true, impoundment: true, events: true, quakes: true,
-            fires: true, facilities: true },
+            fires: true, facilities: true, glof: false },
   facilities: [],
+  glofWatch: null,        // /api/outburst/glof-watch payload, fetched on demand
   theme: localStorage.getItem('theme') || 'dark',
   region: 'NP',
   basemap: 'dark',
@@ -103,6 +104,7 @@ const groups = {
   facilities: L.layerGroup(),
   quakes: L.layerGroup().addTo(map),
   fires: L.layerGroup().addTo(map),
+  glof: L.layerGroup(),
 };
 const selectionLayer = L.layerGroup().addTo(map);
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -646,6 +648,10 @@ document.querySelectorAll('[data-layer]').forEach((el) =>
       await loadFacilities();
       drawFacilities();
     }
+    if (el.dataset.layer === 'glof' && el.checked) {
+      await loadGlofWatch();
+      drawGlofLakes();
+    }
     syncLayers();
   }));
 
@@ -933,7 +939,7 @@ async function renderNearby(place) {
 }
 
 function showTab(which) {
-  ['feeds', 'explore', 'updates', 'model', 'charts'].forEach((t) => {
+  ['feeds', 'explore', 'updates', 'model', 'charts', 'glof', 'profile'].forEach((t) => {
     $(`#pane-${t}`).hidden = t !== which;
     $(`#tab-${t}`).setAttribute('aria-selected', String(t === which));
   });
@@ -942,6 +948,8 @@ function showTab(which) {
   if (which === 'updates') renderUpdates();
   if (which === 'model') renderModel();
   if (which === 'charts') renderCharts();
+  if (which === 'glof') renderGlofTab();
+  if (which === 'profile') renderProfileTab();
 }
 
 $('#tab-feeds').addEventListener('click', () => showTab('feeds'));
@@ -949,6 +957,8 @@ $('#tab-explore').addEventListener('click', () => showTab('explore'));
 $('#tab-updates').addEventListener('click', () => showTab('updates'));
 $('#tab-model').addEventListener('click', () => showTab('model'));
 $('#tab-charts').addEventListener('click', () => showTab('charts'));
+$('#tab-glof').addEventListener('click', () => showTab('glof'));
+$('#tab-profile').addEventListener('click', () => showTab('profile'));
 $('#chart-filter').addEventListener('input', (e) => {
   chartState.filter = e.target.value; drawChartGrid();
 });
@@ -1015,6 +1025,8 @@ function writeHash() {
     if (!$('#pane-explore').hidden) parts.push('tab=explore');
     else if (!$('#pane-updates').hidden) parts.push('tab=updates');
     else if (!$('#pane-model').hidden) parts.push('tab=model');
+    else if (!$('#pane-glof').hidden) parts.push('tab=glof');
+    else if (!$('#pane-profile').hidden) parts.push('tab=profile');
     if (state.theme !== 'dark') parts.push(`theme=${state.theme}`);
     if (state.basemap !== 'dark') parts.push(`basemap=${state.basemap}`);
     if (state.satLayer !== 'esri') parts.push(`imagery=${state.satLayer}`);
@@ -1038,7 +1050,7 @@ async function applyHash() {
       if (h.tab === 'explore') await exploreAt(st);
       else if (h.tab) showTab(h.tab);
     }
-  } else if (h.tab && ['feeds', 'explore', 'updates', 'model'].includes(h.tab)) {
+  } else if (h.tab && ['feeds', 'explore', 'updates', 'model', 'glof', 'profile'].includes(h.tab)) {
     showTab(h.tab);
   }
 }
@@ -1144,14 +1156,34 @@ const OFFICIAL_SOURCES = [
   ]},
 ];
 
+/* Reachability is a 45-minute background check on the backend (checking six
+   homepages is not worth doing every 12-minute cycle) -- a dot per source
+   rather than pretending these pages are a scraped feed, which they are not
+   (NDRRMA's bulletin and DHM's notices are client-rendered SPAs with nothing
+   structured to parse). */
+function statusDot(status) {
+  if (!status || status.reachable == null) return '<span class="src-dot" title="Not checked yet"></span>';
+  const cls = status.reachable ? 'up' : 'down';
+  const title = status.reachable
+    ? `Reachable · checked ${fmtDate(status.checked_at)}`
+    : `Unreachable · checked ${fmtDate(status.checked_at)}${status.error ? ' · ' + status.error : ''}`;
+  return `<span class="src-dot ${cls}" title="${esc(title)}"></span>`;
+}
+
 async function renderUpdates() {
-  const news = await fetchJson('/api/news?limit=40');
+  const [news, official] = await Promise.all([
+    fetchJson('/api/news?limit=40'),
+    fetchJson('/api/official-sources').catch(() => null),
+  ]);
+  const statusByUrl = {};
+  (official?.sources || []).forEach((s) => { statusByUrl[s.url] = s.status; });
 
   const links = OFFICIAL_SOURCES.map((g) => `
     <h4>${esc(g.group)}</h4>
     <div class="src-list">
       ${g.items.map((i) => `
         <a class="src" href="${safeUrl(i.url)}" target="_blank" rel="noopener noreferrer">
+          ${statusDot(statusByUrl[i.url])}
           <span class="src-main">${esc(i.name)}
             <span class="muted small">${esc(i.detail)}</span></span>
           <span class="src-go" aria-hidden="true">&#8599;</span>
@@ -1169,6 +1201,12 @@ async function renderUpdates() {
 
     ${renderSafety()}
     ${links}
+    <p class="muted small src-note">
+      ${official ? `Link reachability checked every ${official.check_interval_minutes} min in the background.`
+                 : 'Link reachability check unavailable.'}
+      Linked, not scraped: these pages render client-side, so there is nothing
+      structured to pull into a feed.
+    </p>
     ${await renderRelief()}
     <p class="muted small src-note">
       Social pages open in a new tab. Their posts are not copied into this
@@ -1217,6 +1255,153 @@ function drawFacilities() {
         ${mapLinks(f.lat, f.lon, f.title)}`)
       .addTo(groups.facilities);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Glacial lake outburst flood (GLOF) watch
+// ---------------------------------------------------------------------------
+/* Six named lakes nationally -- unlike facilities there is no viewport-based
+   fetch, since plotting all of them costs nothing at any zoom. This is a
+   ranking of ALREADY-KNOWN dangerous lakes (ICIMOD/UNDP/DHM) cross-checked
+   against the live gauge network, not a breach prediction -- see the GLOF
+   tab and backend/app/hazards/glof_watch.py for why that distinction is kept
+   explicit rather than implied by a percentage. */
+async function loadGlofWatch() {
+  try { state.glofWatch = await fetchJson('/api/outburst/glof-watch'); }
+  catch { state.glofWatch = null; }
+}
+
+function drawGlofLakes() {
+  groups.glof.clearLayers();
+  if (!state.glofWatch) return;
+  state.glofWatch.lakes.forEach((entry) => {
+    const lake = entry.lake;
+    const color = entry.live_corroboration ? cssVar('--danger') : cssVar('--glacier');
+    const html = `<span class="glof-pin ${entry.live_corroboration ? 'active' : ''}"
+        style="--glof:${color}" aria-hidden="true">&#9650;</span>`;
+    L.marker([lake.lat, lake.lon], {
+      icon: L.divIcon({ html, className: 'glof-pin-wrap', iconSize: [20, 20], iconAnchor: [10, 16] }),
+      title: lake.name,
+    }).bindPopup(`
+        <h3>${esc(lake.name)} <span class="tag" style="background:${color}">Rank ${esc(lake.rank)}</span></h3>
+        <dl>
+          <dt>Basin / district</dt><dd>${esc(lake.basin)} &middot; ${esc(lake.district)}</dd>
+          <dt>Live signal</dt><dd>${entry.live_corroboration ? 'Precursor signal active nearby' : 'No active precursor signal'}</dd>
+          <dt>Note</dt><dd>${esc(lake.area_note)}</dd>
+          <dt>Source</dt><dd><a href="${safeUrl(lake.source_url)}" target="_blank" rel="noopener noreferrer">${esc(lake.source)}</a></dd>
+          ${lake.approximate ? '<dt>Location</dt><dd>approximate — no surveyed lake-level coordinate published</dd>' : ''}
+        </dl>
+        ${mapLinks(lake.lat, lake.lon, lake.name)}`)
+      .addTo(groups.glof);
+  });
+}
+
+async function renderGlofTab() {
+  const el = $('#glof');
+  el.innerHTML = '<p class="empty">Loading glacial lake watch…</p>';
+  try {
+    if (!state.glofWatch) await loadGlofWatch();
+    const d = state.glofWatch;
+    if (!d) throw new Error('no data');
+    drawGlofLakes();
+
+    el.innerHTML = `
+      <h4>Known priority glacial lakes</h4>
+      <p class="muted small src-note">${esc(d.scope)}</p>
+      <div class="glof-cards">
+        ${d.lakes.map((entry) => {
+          const lake = entry.lake;
+          return `<div class="glof-card ${entry.live_corroboration ? 'active' : ''}">
+            <div class="glof-card-head">
+              <b>${esc(lake.name)}</b>
+              <span class="tag" style="background:${entry.live_corroboration ? cssVar('--danger') : cssVar('--glacier')}">
+                Rank ${esc(lake.rank)}</span>
+            </div>
+            <p class="muted small">${esc(lake.basin)} basin &middot; ${esc(lake.district)}${lake.approximate ? ' (approximate)' : ''}</p>
+            <p class="small">${esc(entry.note)}</p>
+            <p class="muted small">${esc(lake.area_note)}</p>
+            <a class="small" href="${safeUrl(lake.source_url)}" target="_blank" rel="noopener noreferrer">${esc(lake.source)} &#8599;</a>
+          </div>`;
+        }).join('')}
+      </div>
+      <h4>Basin context</h4>
+      <p class="small">${esc(d.context.note)}</p>
+      <p class="muted small">
+        By basin: ${Object.entries(d.context.by_basin).map(([b, n]) => `${esc(b)} ${n}`).join(' · ')}
+        &middot; <a href="${safeUrl(d.context.source_url)}" target="_blank" rel="noopener noreferrer">${esc(d.context.source)} &#8599;</a>
+      </p>`;
+  } catch (err) {
+    el.innerHTML = '<p class="empty">Could not load the glacial lake watch list.</p>';
+    console.error(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Country profile: census demographics and protected areas / wildlife
+// ---------------------------------------------------------------------------
+async function renderProfileTab() {
+  const el = $('#profile');
+  el.innerHTML = '<p class="empty">Loading country profile…</p>';
+  try {
+    const [demo, wild] = await Promise.all([
+      fetchJson('/api/reference/demographics'), fetchJson('/api/reference/wildlife'),
+    ]);
+
+    const demoRows = demo.major_groups.map((g) => `
+      <div class="bar-row">
+        <span>${esc(g.group)}</span>
+        <span class="bar"><i style="width:${g.percent * 5}%"></i></span>
+        <b>${g.percent}%</b>
+      </div>`).join('');
+
+    const areasByKind = {};
+    wild.protected_areas.areas.forEach((a) => {
+      (areasByKind[a.kind] = areasByKind[a.kind] || []).push(a);
+    });
+
+    el.innerHTML = `
+      <h4>Caste &amp; ethnicity — 2021 census</h4>
+      <p class="muted small src-note">
+        ${esc(demo.source.publisher)}, ${esc(demo.source.publication)} &middot;
+        ${demo.total_groups_recorded} groups recorded &middot;
+        <a href="${safeUrl(demo.source.url)}" target="_blank" rel="noopener noreferrer">census portal &#8599;</a> &middot;
+        <a href="${safeUrl(demo.source.results_explorer_url)}" target="_blank" rel="noopener noreferrer">results explorer (province/district/municipality) &#8599;</a>
+      </p>
+      <div class="bars">${demoRows}</div>
+      <p class="muted small">${esc(demo.source.note)}</p>
+      <p class="muted small">Dalit (all sub-groups): ${demo.broad_classifications['Dalit (all sub-groups)']}% &middot; ${esc(demo.broad_classifications.note)}</p>
+
+      <h4>Flagship species</h4>
+      <p class="muted small src-note">Most recent national survey per species — figures are periodic, not annual.</p>
+      <div class="species-cards">
+        ${wild.species_counts.map((s) => `
+          <div class="species-card">
+            <b>${s.count.toLocaleString()}</b>
+            <span>${esc(s.species)}</span>
+            <span class="muted small">${s.survey_year ? s.survey_year + ' survey' : 'estimate'}</span>
+            ${s.breakdown ? `<span class="muted small">${Object.entries(s.breakdown).map(([k, v]) => `${esc(k)} ${v}`).join(' · ')}</span>` : ''}
+            ${s.note ? `<span class="muted small">${esc(s.note)}</span>` : ''}
+            <a class="small" href="${safeUrl(s.source_url)}" target="_blank" rel="noopener noreferrer">${esc(s.source)} &#8599;</a>
+          </div>`).join('')}
+      </div>
+
+      <h4>Protected areas — DNPWC</h4>
+      <p class="muted small src-note">
+        ${esc(wild.protected_areas.source.note)} &middot;
+        <a href="${safeUrl(wild.protected_areas.source.url)}" target="_blank" rel="noopener noreferrer">${esc(wild.protected_areas.source.publisher)} &#8599;</a>
+      </p>
+      ${Object.entries(areasByKind).map(([kind, areas]) => `
+        <p class="muted small"><b>${esc(kind)}</b> (${areas.length})</p>
+        <ul class="nearby-list">
+          ${areas.map((a) => `<li class="nearby-row">
+            <span class="nearby-main">${esc(a.name)}${a.note ? `<span class="muted small"> — ${esc(a.note)}</span>` : ''}</span>
+            <b>${a.area_km2 != null ? a.area_km2.toLocaleString() + ' km²' : '—'}</b>
+          </li>`).join('')}
+        </ul>`).join('')}`;
+  } catch (err) {
+    el.innerHTML = '<p class="empty">Could not load the country profile.</p>';
+    console.error(err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1503,6 +1688,9 @@ function connectLive() {
   sse.addEventListener('cycle', () => {
     setLiveState('live', 'updating…');
     refresh().then(() => { setLiveState('live'); return refreshCharts(); });
+    // Live corroboration can flip with the new cycle's impoundment signals.
+    if (state.layers.glof) loadGlofWatch().then(drawGlofLakes);
+    if (!$('#pane-glof').hidden) renderGlofTab();
   });
 
   sse.addEventListener('hello', () => { sseRetry = 0; setLiveState('live'); });
